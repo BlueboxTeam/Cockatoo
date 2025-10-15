@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Security.Cryptography;
 using Amazon;
 using Amazon.Internal;
 using Amazon.S3;
@@ -170,11 +171,13 @@ public class S3Service : BaseService
     {
         var tmpFileLocation = Path.GetTempFileName();
         _log.Debug($"[location={location}] Writing to {tmpFileLocation}");
+        var hash = SHA256.Create();
+        var cs = new CryptoStream(stream, hash, CryptoStreamMode.Read);
         using (var tf = File.Open(tmpFileLocation, FileMode.OpenOrCreate))
         {
             await stream.CopyToAsync(tf);
             tf.Seek(0, SeekOrigin.Begin);
-            LocalFileHashLookup[location] = CockatooHelper.GetSha256Hash(tf);
+            LocalFileHashLookup[location] = BitConverter.ToString(hash.Hash ?? []).Replace("-", "").ToLower();
         }
         await UploadMultipartObject(tmpFileLocation, location);
         _log.Debug($"[location={location}] Deleting temporary file {tmpFileLocation}");

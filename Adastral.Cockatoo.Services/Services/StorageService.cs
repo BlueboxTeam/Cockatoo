@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Security.Cryptography;
 using Adastral.Cockatoo.Common;
 using Adastral.Cockatoo.Common.Helpers;
 using Adastral.Cockatoo.DataAccess.Models;
@@ -160,20 +161,14 @@ public class StorageService : BaseService
         model.Location = $"{model.Id}/{filename}";
 
         content.Seek(0, SeekOrigin.Begin);
+        var hash = SHA256.Create();
+        var cs = new CryptoStream(content, hash, CryptoStreamMode.Read);
+        
         if (_config.Storage.S3.Enable)
         {
             _log.Trace($"Uploading object to S3");
             var s3 = _services.GetRequiredService<S3Service>();
-            var s3Obj = await s3.UploadObject(content, model.Location, length);
-            model.Sha256Hash = s3Obj.ChecksumSHA256;
-            if (string.IsNullOrEmpty(model.Sha256Hash))
-            {
-                using (var x = await s3.GetObject(model))
-                {
-                    _log.Debug($" [id={model.Id}, filename={filename}] Manually calculating SHA256 sum from AWS. This shouldn't happen, but it did :/");
-                    model.Sha256Hash = CockatooHelper.GetSha256Hash(x.ResponseStream);
-                }
-            }
+            var s3Obj = await s3.UploadObject(cs, model.Location, length);
             model.SetSize(s3Obj.ContentLength);
         }
         else
@@ -181,14 +176,11 @@ public class StorageService : BaseService
             var location = Path.Combine(_config.Storage.Local.Location, model.Location);
             using (var f = File.Open(location, FileMode.OpenOrCreate))
             {
-                await content.CopyToAsync(f);
-            }
-            using (var f = File.Open(location, FileMode.Open))
-            {
-                model.Sha256Hash = CockatooHelper.GetSha256Hash(f);
+                await cs.CopyToAsync(f);
             }
             model.SetSize(content.Length);
         }
+        model.Sha256Hash = BitConverter.ToString(hash.Hash ?? []).Replace("-", "").ToLower();
         await _storageFileRepo.InsertOrUpdate(model);
         return model;
     }
