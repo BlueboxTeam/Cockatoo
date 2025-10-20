@@ -214,9 +214,13 @@ public class S3Service : BaseService
     public async Task<GetObjectResponse> UploadObject(Stream stream, string location, long? length = null)
     {
         bool fileWrite = false;
-        if (stream.Length == 0 || (length != null && length != stream.Length))
+        long? streamLength = 0;
+        try
+        { streamLength = stream.Length; }
+        catch {}
+        if (!stream.CanSeek || streamLength == 0 || (length != null && length != streamLength))
         {
-            _log.Debug($"Writing to disk then uploading, since stream length ({stream.Length}) does not match the length provided ({length})");
+            _log.Debug($"Writing to disk then uploading, since stream length ({streamLength}) does not match the length provided ({length})");
             await FileWriteThenUploadMultipartObject(stream, location);
             fileWrite = true;
         }
