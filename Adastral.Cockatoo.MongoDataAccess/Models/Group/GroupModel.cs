@@ -1,19 +1,23 @@
+﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
+using System.Xml.Serialization;
+using Adastral.Cockatoo.Common;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
 namespace Adastral.Cockatoo.DataAccess.Models;
 
-public class GroupModel
+public class GroupModel : BaseGuidModel
 {
-    public const string TableName = "CockatooGroup";
-
+    public const string CollectionName = "group";
     public GroupModel()
+        : base()
     {
-        Id = Guid.NewGuid();
         Name = "";
-        CreatedAt = DateTimeOffset.UtcNow;
-        Priority = uint.MaxValue;
+        CreatedAt = new(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        Priority = int.MaxValue;
     }
 
-    public Guid Id { get; set; }
-    
     /// <summary>
     /// Name of this Group.
     /// </summary>
@@ -26,13 +30,18 @@ public class GroupModel
     public string FormatName()
     {
         return string.IsNullOrEmpty(Name)
-            ? Id.ToString() : Name;
+            ?
+            Id
+            : Name;
     }
 
     /// <summary>
     /// Unix Timestamp when this Group was created (UTC, Seconds)
     /// </summary>
-    public DateTimeOffset CreatedAt { get; set; }
+    [Required]
+    [BsonRequired]
+    [JsonConverter(typeof(JsonLongBsonTimestampConverter))]
+    public BsonTimestamp CreatedAt { get; set; }
 
 
     /// <summary>

@@ -6,16 +6,13 @@ public class BullseyeV2
 {
     [JsonPropertyName("bl_ver")]
     public uint SchemaVersion { get; set; } = 2;
-    
     [JsonPropertyName("version")]
     public string? LatestVersion { get; set; } = null;
-    
     /// <summary>
     /// Short name for the game that this is for. Like <see cref="AppVarModDetail.SourceModName"/>
     /// </summary>
     [JsonPropertyName("game")]
     public string Name { get; set; } = "";
-
     /// <summary>
     /// Unix Timestamp since this file was last updated (UTC, Seconds), but stored as a String.
     /// </summary>
@@ -36,10 +33,6 @@ public class BullseyeV2
     public void SetLastUpdated(long value)
     {
         LastUpdated = value.ToString();
-    }
-    public void SetLastUpdated(DateTimeOffset value)
-    {
-        LastUpdated = value.ToUnixTimeSeconds().ToString();
     }
 
     /// <summary>

@@ -1,63 +1,31 @@
-using System.Text.Json;
-using Adastral.Cockatoo.Common;
-using kate.shared.Helpers;
-using MongoDB.Bson;
+using System.ComponentModel;
 
 namespace Adastral.Cockatoo.DataAccess.Models;
 
 public class BullseyeV2CacheModel
-    : BaseGuidModel
 {
-    public const string CollectionName = "bullseye_cache_v2";
+    public const string TableName = "BullseyeCacheV2";
 
     public BullseyeV2CacheModel()
-        : base()
     {
-        TargetAppId = "";
-        Content = GeneralHelper.Base64Encode("{}");
-        CreatedAt = new BsonTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        ApplicationId = Guid.Empty;
         IsLive = false;
+        Content = new();
+        CreatedAt = DateTimeOffset.UtcNow;
     }
 
-    /// <summary>
-    /// Timestamp when this Cache Model was created (Unix Epoch, UTC, Seconds)
-    /// </summary>
-    public BsonTimestamp CreatedAt { get; set; }
+    public Guid ApplicationId { get; set; }
 
     /// <summary>
     /// Is this current cached model live/published?
     /// </summary>
+    [DefaultValue(false)]
     public bool IsLive { get; set; }
 
-    /// <summary>
-    /// Target App that this cached model is for.
-    /// </summary>
-    /// <remarks>
-    /// Foreign Key to <see cref="BullseyeAppModel"/>
-    /// </remarks>
-    public string TargetAppId { get; set; }
+    public BullseyeV2 Content { get; set; }
 
     /// <summary>
-    /// JSON of <see cref="BullseyeV2"/> encoded in Base64.
+    /// When this Cache Model was created (UTC)
     /// </summary>
-    public string Content { get; set; }
-
-    /// <summary>
-    /// Decode and deserialize <see cref="Content"/>
-    /// </summary>
-    public BullseyeV2? GetContent()
-    {
-        var decoded = GeneralHelper.Base64Decode(Content);
-        var data = JsonSerializer.Deserialize<BullseyeV2>(decoded, BaseService.SerializerOptions);
-        return data;
-    }
-
-    /// <summary>
-    /// Serialize and Encode ase Base64.
-    /// </summary>
-    public void SetContent(BullseyeV2 model)
-    {
-        var data = JsonSerializer.Serialize(model, BaseService.SerializerOptions);
-        Content = GeneralHelper.Base64Encode(data);
-    }
+    public DateTimeOffset CreatedAt { get; set; }
 }

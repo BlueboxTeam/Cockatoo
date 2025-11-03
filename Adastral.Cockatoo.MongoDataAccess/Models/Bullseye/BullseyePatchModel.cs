@@ -1,27 +1,24 @@
-using System.ComponentModel;
+using System.Text.Json.Serialization;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace Adastral.Cockatoo.DataAccess.Models;
 
-public class BullseyePatchModel
+/// <summary>
+/// Model representing a patch that can be used to upgrade from one <see cref="BullseyeAppRevisionModel"/> to another.
+/// </summary>
+public class BullseyePatchModel : BaseGuidModel
 {
-    public const string TableName = "BullseyePatch";
+    public const string CollectionName = "bullseye_patch";
 
     public BullseyePatchModel()
+        : base()
     {
-        Id = Guid.NewGuid();
-        ApplicationId = Guid.Empty;
-        FromRevisionId = Guid.Empty;
-        ToRevisionId = Guid.Empty;
-        StorageFileId = Guid.Empty;
-        CreatedAt = DateTimeOffset.UtcNow;
+        FromRevisionId = "";
+        ToRevisionId = "";
+        StorageFileId = "";
+        CreatedAt = new BsonTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
     }
-
-    public Guid Id { get; set; }
-
-    /// <summary>
-    /// Foreign Key to <see cref="ApplicationBullseyeModel.ApplicationId"/>/<see cref="ApplicationModel.Id"/>
-    /// </summary>
-    public Guid ApplicationId { get; set; }
 
     /// <summary>
     /// Revision that this patch will be upgrading from
@@ -29,15 +26,15 @@ public class BullseyePatchModel
     /// <remarks>
     /// Foreign Key to <see cref="BullseyeAppRevisionModel.Id"/>
     /// </remarks>
-    public Guid FromRevisionId { get; set; }
-    
+    public string FromRevisionId { get; set; }
+
     /// <summary>
     /// Revision that this patch will be upgrading to
     /// </summary>
     /// <remarks>
     /// Foreign Key to <see cref="BullseyeAppRevisionModel.Id"/>
     /// </remarks>
-    public Guid ToRevisionId { get; set; }
+    public string ToRevisionId { get; set; }
 
     /// <summary>
     /// Id for <see cref="StorageFileModel"/> that contains the Butler Patch file.
@@ -45,19 +42,23 @@ public class BullseyePatchModel
     /// <remarks>
     /// Foreign Key to <see cref="StorageFileModel.Id"/>
     /// </remarks>
-    public Guid StorageFileId { get; set; }
-    
+    public string StorageFileId { get; set; }
+
     /// <summary>
     /// Id for <see cref="StorageFileModel"/> that contains the <c>.torrent</c> file that contains the Butler Patch file.
     /// </summary>
     /// <remarks>
     /// Foreign Key to <see cref="StorageFileModel.Id"/>
     /// </remarks>
-    [DefaultValue(null)]
-    public Guid? TorrentStorageFileId { get; set; }
+    public string? PeerToPeerStorageFileId { get; set; }
 
     /// <summary>
-    /// When this patch was created.
+    /// Timestamp when this Patch was created (Unix Epoch, UTC, Seconds)
     /// </summary>
-    public DateTimeOffset CreatedAt { get; set; }
+    [JsonIgnore]
+    public BsonTimestamp CreatedAt { get; set; }
+
+    [BsonIgnore]
+    [JsonPropertyName(nameof(CreatedAt))]
+    public long? CreatedAtJson => CreatedAt?.Value;
 }
