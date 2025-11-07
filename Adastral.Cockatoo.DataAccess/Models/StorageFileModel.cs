@@ -51,6 +51,12 @@ public class StorageFileModel
     /// </summary>
     public DateTimeOffset? UpdatedAt { get; set; }
 
+    public Guid? CreatedByUserId { get; set; }
+
+    #region Property Accessors
+    public UserModel? CreatedByUser { get; set; }
+    #endregion
+
     public bool HasHash()
     {
         return !string.IsNullOrEmpty(Sha256Hash) || Sha256Hash != "".PadRight(64, '0');

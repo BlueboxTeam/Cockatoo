@@ -28,6 +28,7 @@ public class ApplicationDbContext
 
     public DbSet<StorageFileModel> StorageFiles { get; set; }
 
+    // TODO need to see if this is easier to do with ASP.NET Core Identity or not.
     public DbSet<ServiceAccountModel> ServiceAccounts { get; set; }
     public DbSet<ServiceAccountTokenModel> ServiceAccountTokens { get; set; }
 
@@ -236,7 +237,18 @@ public class ApplicationDbContext
             b.ToTable(BlogTagModel.TableName).HasKey(e => e.Id);
         });
         #endregion
-        
+
+        builder.Entity<StorageFileModel>(b =>
+        {
+            b.ToTable(StorageFileModel.TableName).HasKey(e => e.Id);
+
+            b.HasIndex(e => e.CreatedAt).IsDescending().IsUnique(false);
+            
+            b.HasOne(e => e.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.CreatedByUserId);
+        });
+
         // will be used in the future to replace GroupPermissions
         builder.Entity<ScopedApplicationRoleModel>(b =>
         {
