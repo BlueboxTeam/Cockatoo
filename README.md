@@ -2,11 +2,13 @@
 Software Distribution tools that is designed for usage with the [Adastral](https://adastralgroup.net) suite of software.
 
 ## Requirements
-- MongoDB v6.0
-- ASP.NET Runtime for .NET 8.0
-- Redis/KeyDB (optional)
+- PostgreSQL 17 or later
+- ASP.NET Runtime for .NET 10
+
+**Optional Requirements**
+- Redis/KeyDB
 - OAuth Provider (preferably Authentik), or LDAP Server
-- (optional) [Management scripts](https://github.com/ktwrd/cockatoo-management-scripts)
+- [Management scripts](https://github.com/ktwrd/cockatoo-management-scripts)
 
 ## Docs
 - [Environment Variables](docs/Environment-Variables.md)
