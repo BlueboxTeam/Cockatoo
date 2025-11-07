@@ -28,10 +28,6 @@ public abstract class BaseService
             IgnoreReadOnlyProperties = true,
             IncludeFields = true,
             WriteIndented = true,
-            ReferenceHandler = ReferenceHandler.Preserve,
-            Converters =
-            {
-                new JsonLongBsonTimestampConverter()
-            }
+            ReferenceHandler = ReferenceHandler.Preserve
         };
 }

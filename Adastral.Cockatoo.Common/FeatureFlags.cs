@@ -1,7 +1,4 @@
-﻿using System.Diagnostics;
-using System.Text.RegularExpressions;
-using Adastral.Cockatoo.Common.Helpers;
-using NLog;
+﻿using Adastral.Cockatoo.Common.Helpers;
 
 namespace Adastral.Cockatoo.Common;
 
@@ -19,46 +16,86 @@ public static class FeatureFlags
     {
         return EnvironmentHelper.ParseString(environmentKey, defaultValue);
     }
-
-    /// <inheritdoc cref="EnvironmentHelper.ParseStringArray"/>
-    private static string[] ParseStringArray(string envKey, string[] defaultValue)
-    {
-        return EnvironmentHelper.ParseStringArray(envKey, defaultValue);
-    }
-
-    /// <inheritdoc cref="EnvironmentHelper.ParseInt"/>
-    private static int ParseInt(string envKey, int defaultValue)
-    {
-        return EnvironmentHelper.ParseInt(envKey, defaultValue);
-    }
     #endregion
 
-    #region Infisical
-    public static string InfisicalClientId_Key => "INFISICAL_CLIENT_ID";
-    public static string InfisicalClientSecret_Key => "INFISICAL_CLIENT_SECRET";
-    public static string InfisicalProjectId_Key => "INFISICAL_PROJECT_ID";
-    public static string InfisicalEndpoint_Key => "INFISICAL_ENDPOINT";
-    public static string InfisicalEnvironment_Key => "INFISICAL_ENVIRONMENT";
-    public static string InfisicalEnable_Key => "INFISICAL_ENABLED";
-    public static string InfisicalClientId => ParseString(InfisicalClientId_Key, "");
-    public static string InfisicalClientSecret => ParseString(InfisicalClientSecret_Key, "");
-    public static string InfisicalProjectId => ParseString(InfisicalProjectId_Key, "");
-    public static string InfisicalEndpoint => ParseString(InfisicalEndpoint_Key, "");
-    public static string InfisicalEnvironment => ParseString(InfisicalEnvironment_Key, "");
-    public static bool InfisicalEnable => ParseBool(InfisicalEnable_Key, false);
-    #endregion
+    public const string RunningInDockerName = "_COCKATOO_RUNNING_IN_DOCKER";
+    public static bool RunningInDocker => ParseBool(RunningInDockerName, false);
 
-    public static bool ConfigXmlEnable => ParseBool("CONFIG_XML_ENABLE", false);
-    public static string ConfigXml => ParseString("CONFIG_XML", "");
-    
     /// <summary>
-    /// <para>Enable Sentry integration</para>
-    /// <para>Key: <c>COCKATOO_SENTRY</c></para>
+    /// <para>Config Location</para>
+    /// <para>Key: <c>COCKATOO_CONFIG</c></para>
+    /// <para>Default Value: <c>./config/cockatoo.xml</c></para>
     /// </summary>
-    public static bool SentryEnable => ParseBool("COCKATOO_SENTRY", false);
+    /// <remarks>
+    /// When running in docker, the default config location will actually be in <c>/config/cockatoo.xml</c>
+    /// </remarks>
+    public static string ConfigLocation => ParseString("COCKATOO_CONFIG", RunningInDocker ? "/config/cockatoo.xml" : "./config/cockatoo.xml");
+
     /// <summary>
     /// <para>Sentry DSN</para>
     /// <para>Key: <c>COCKATOO_SENTRY_DSN</c></para>
     /// </summary>
     public static string SentryDSN => ParseString("COCKATOO_SENTRY_DSN", "");
+    
+    
+    private const string AspNetEnvironmentName = "ASPNET_ENVIRONMENT";
+    private const string DotNetEnvironmentName = "DOTNET_ENVIRONMENT";
+    
+    /// <summary>
+    /// <para><b>Key:</b> <c>ASPNET_ENVIRONMENT</c></para>
+    /// </summary>
+    public static string AspNetEnvironment => ParseString(AspNetEnvironmentName, "");
+    /// <summary>
+    /// <para><b>Key:</b> <c>DOTNET_ENVIRONMENT</c></para>
+    /// </summary>
+    public static string DotNetEnvironment => ParseString(DotNetEnvironmentName, "");
+    
+    /// <summary>
+    /// Check if either <see cref="AspNetEnvironment"/> or <see cref="DotNetEnvironment"/>
+    /// equals <c>DEVELOPMENT</c> (case-insensitive)
+    /// </summary>
+    public static bool IsDevelopmentEnvironment
+        => AspNetEnvironment.Trim().Equals("DEVELOPMENT", StringComparison.InvariantCultureIgnoreCase)
+        || DotNetEnvironment.Trim().Equals("DEVELOPMENT", StringComparison.InvariantCultureIgnoreCase);
+    public static void SetEnvironment(string value)
+    {
+        Environment.SetEnvironmentVariable(AspNetEnvironmentName, value);
+        Environment.SetEnvironmentVariable(DotNetEnvironmentName, value);
+    }
+    
+    /// <summary>
+    /// <para>Make sure that <see cref="AspNetEnvironment"/> and <see cref="DotNetEnvironment"/>
+    /// equal to whatever one is set, when the other isn't set.</para>
+    ///
+    /// When <see cref="AspNetEnvironment"/> is set, and <see cref="DotNetEnvironment"/> isn't set, then this will set the value for <see cref="DotNetEnvironment"/> to be equal to <see cref="AspNetEnvironment"/>.
+    /// Same thing is done, but with the environment variables swapped.
+    /// </summary>
+    public static void EnsureEnvironmentValue()
+    {
+        const string prefix = $"[{nameof(FeatureFlags)}.{nameof(EnsureEnvironmentValue)}]";
+        if (string.IsNullOrEmpty(DotNetEnvironment) &&
+            !string.IsNullOrEmpty(AspNetEnvironment))
+        {
+            System.Diagnostics.Trace.WriteLine($"{prefix} Updated {DotNetEnvironmentName} to match {AspNetEnvironmentName} ({AspNetEnvironment})");
+            SetEnvironment(AspNetEnvironment);
+        }
+        else if (!string.IsNullOrEmpty(DotNetEnvironment) &&
+                 string.IsNullOrEmpty(AspNetEnvironment))
+        {
+            System.Diagnostics.Trace.WriteLine($"{prefix} Updated {AspNetEnvironmentName} to match {DotNetEnvironmentName} ({DotNetEnvironment})");
+            SetEnvironment(DotNetEnvironment);
+        }
+        else if (string.IsNullOrEmpty(DotNetEnvironment) && string.IsNullOrEmpty(AspNetEnvironment))
+        {
+            System.Diagnostics.Trace.WriteLine($"{prefix} {AspNetEnvironmentName} and {DotNetEnvironmentName} aren't set.");
+        }
+        else if (!string.IsNullOrEmpty(DotNetEnvironment) && !string.IsNullOrEmpty(AspNetEnvironment) &&
+                 !DotNetEnvironment.Equals(AspNetEnvironment, StringComparison.InvariantCultureIgnoreCase))
+        {
+            System.Diagnostics.Trace.WriteLine(string.Join(Environment.NewLine,
+                $"{prefix} {AspNetEnvironmentName} and {DotNetEnvironmentName} are set to different values!!!",
+                $"{AspNetEnvironmentName}: {AspNetEnvironment}",
+                $"{DotNetEnvironmentName}: {DotNetEnvironment}"));
+        }
+    }
 }
