@@ -34,4 +34,11 @@ public class GroupMembershipModel
     /// Who made this user apart of this group?
     /// </summary>
     public Guid? CreatedByUserId { get; set; }
+
+
+    #region Property Accessors
+    public GroupModel Group { get; set; } = null;
+    public UserModel User { get; set; } = null;
+    public UserModel? CreatedByUser { get; set; }
+    #endregion
 }

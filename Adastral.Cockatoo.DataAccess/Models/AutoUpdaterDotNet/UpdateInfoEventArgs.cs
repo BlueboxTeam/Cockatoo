@@ -119,7 +119,7 @@ public class UpdateInfoEventArgs
         ///     Mode that should be used for this update.
         /// </summary>
         [XmlAttribute("mode")]
-        public AUDNMandatoryKind UpdateMode { get; set; }
+        public AutoUpdaterDotNetMandatoryKind UpdateMode { get; set; }
     }
     /// <summary>
     /// Checksum class to fetch the XML values for checksum.

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Adastral.Cockatoo.DataAccess.Models;
 
 public class GroupModel
@@ -17,6 +19,7 @@ public class GroupModel
     /// <summary>
     /// Name of this Group.
     /// </summary>
+    [MaxLength(200)]
     public string Name { get; set; }
 
     /// <summary>

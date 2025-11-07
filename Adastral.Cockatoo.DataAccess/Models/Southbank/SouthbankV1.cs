@@ -1,18 +1,17 @@
+using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 namespace Adastral.Cockatoo.DataAccess.Models;
 
-public class SouthbankV1
+public class SouthbankV1 : SouthbankBase
 {
-    [JsonPropertyName("sb_ver")]
-    public string Version { get; set; } = "0.0.1";
-
     [JsonPropertyName("dl_url")]
     public string DownloadUrl { get; set; } = "";
 
     [JsonPropertyName("games")]
     public Dictionary<string, SouthbankV1GameItem> Games { get; set; } = new();
 }
+
 public class SouthbankV1GameItem
 {
     /// <summary>
@@ -30,6 +29,7 @@ public class SouthbankV1GameItem
     [JsonPropertyName("belmont")]
     public SouthbankV1BelmontDetails BelmontDetails { get; set; } = new();
 }
+
 public class SouthbankV1BelmontDetails
 {
     /// <summary>
