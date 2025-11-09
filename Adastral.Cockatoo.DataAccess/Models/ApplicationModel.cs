@@ -79,9 +79,9 @@ public class ApplicationModel
     }
 
     #region Property Accessors
+    public List<ApplicationBrandColorModel> BrandColors { get; set; } = [];
+    public List<ApplicationBrandAssetModel> BrandAssets { get; set; } = [];
     public ApplicationSourceModModel SourceMod { get; set; } = new();
-    public ApplicationBrandingModel Branding { get; set; } = new();
-    public SouthbankCacheModel? SouthbankCache { get; set; }
     #endregion
 }
 

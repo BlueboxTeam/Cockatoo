@@ -11,7 +11,7 @@ public class ManageBullseyeV1UpdateRevisionRequest
     /// </summary>
     [Required]
     [JsonPropertyName("id")]
-    public string RevisionId { get; set; } = "";
+    public Guid RevisionId { get; set; } = Guid.Empty;
 
     /// <summary>
     /// When not <see langword="null"/>, then the value of <see cref="Adastral.Cockatoo.DataAccess.Models.BullseyeAppRevisionModel.PreviousRevisionId"/>
@@ -30,7 +30,7 @@ public class ManageBullseyeV1UpdateRevisionRequest
     [DefaultValue(null)]
     [JsonPropertyName("previousRevisionId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? PreviousRevisionId { get; set; }
+    public Guid? PreviousRevisionId { get; set; }
 
     /// <summary>
     /// When <see langword="true"/>, then the value for <see cref="Adastral.Cockatoo.DataAccess.Models.BullseyeAppRevisionModel.PreviousRevisionId"/> will

@@ -22,10 +22,10 @@ public class BullseyeService : BaseService
     private readonly BullseyeV1CacheRepository _bullCacheV1Repo;
     private readonly BullseyeV2CacheRepository _bullCacheV2Repo;
     private readonly BullseyeAppRepository _bullseyeAppRepo;
-    private readonly BullseyeAppRevisionRepository _bullRevisionRepo;
+    private readonly BullseyeRevisionRepository _bullRevisionRepo;
     private readonly BullseyePatchRepository _bullseyePatchRepo;
     private readonly BullseyeCacheService _bullseyeCacheService;
-    private readonly ApplicationDetailRepository _appDetailRepo;
+    private readonly ApplicationRepository _appDetailRepo;
     private readonly StorageFileRepository _storageFileRepo;
     private readonly StorageService _storageService;
     public BullseyeService(IServiceProvider services)
@@ -34,18 +34,18 @@ public class BullseyeService : BaseService
         _bullCacheV1Repo = services.GetRequiredService<BullseyeV1CacheRepository>();
         _bullCacheV2Repo = services.GetRequiredService<BullseyeV2CacheRepository>();
         _bullseyeAppRepo = services.GetRequiredService<BullseyeAppRepository>();
-        _bullRevisionRepo = services.GetRequiredService<BullseyeAppRevisionRepository>();
+        _bullRevisionRepo = services.GetRequiredService<BullseyeRevisionRepository>();
         _bullseyePatchRepo = services.GetRequiredService<BullseyePatchRepository>();
         _bullseyeCacheService = services.GetRequiredService<BullseyeCacheService>();
-        _appDetailRepo = services.GetRequiredService<ApplicationDetailRepository>();
+        _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
         _storageFileRepo = services.GetRequiredService<StorageFileRepository>();
         _storageService = services.GetRequiredService<StorageService>();
     }
     
-    public async Task<List<ApplicationDetailModel>> GetAllApps()
+    public async Task<List<ApplicationModel>> GetAllApps()
     {
         var apps = (await _appDetailRepo.GetAll())
-            .Where(v => v.Type == ApplicationDetailType.Kachemak)
+            .Where(v => v.Type == ApplicationType.Kachemak)
             .ToList();
         foreach (var item in apps)
         {
@@ -53,7 +53,7 @@ public class BullseyeService : BaseService
             {
                 await _bullseyeAppRepo.InsertOrUpdate(new()
                 {
-                    ApplicationDetailModelId = item.Id
+                    ApplicationId = item.Id
                 });
             }
         }
@@ -66,7 +66,7 @@ public class BullseyeService : BaseService
         /// Generated (or found) instance of <see cref="BullseyeAppModel"/>. When <see langword="null"/>, act as if an
         /// exception was thrown.
         /// </summary>
-        public BullseyeAppModel? App { get; set; } = null;
+        public ApplicationBullseyeModel? App { get; set; } = null;
         /// <summary>
         /// Was a new instance of <see cref="BullseyeAppModel"/> created? Only set to <see langword="true"/> when one
         /// doesn't exist in <see cref="BullseyeAppRepository"/> and <see cref="AppDetailExists"/> is set to <see langword="true"/>
@@ -83,7 +83,7 @@ public class BullseyeService : BaseService
         /// </summary>
         public bool? AppDetailTypeAllowed { get; set; } = null;
     }
-    public async Task<GetBullseyeAppResult> GetApp(string id)
+    public async Task<GetBullseyeAppResult> GetApp(Guid id)
     {
         var appDetail = await _appDetailRepo.GetById(id);
         if (appDetail == null)
@@ -91,7 +91,7 @@ public class BullseyeService : BaseService
             return new();
         }
 
-        if (appDetail.Type != ApplicationDetailType.Kachemak)
+        if (appDetail.Type != ApplicationType.Kachemak)
         {
             return new()
             {
@@ -111,7 +111,7 @@ public class BullseyeService : BaseService
         {
             bullApp = new()
             {
-                ApplicationDetailModelId = id
+                ApplicationId = id
             };
             await _bullseyeAppRepo.InsertOrUpdate(bullApp);
         }
@@ -169,37 +169,32 @@ public class BullseyeService : BaseService
         PreviousRevisionAppMismatch
     }
     public async Task<CanRegisterVersionResult> CanRegisterRevision(
-        string appId,
-        uint version,
+        Guid appId,
+        int version,
         string? tag,
-        string archiveFileId,
-        string? peerToPeerFileId = null,
-        string? signatureFileId = null,
-        string? previousRevisionId = null)
+        Guid archiveFileId,
+        Guid? peerToPeerFileId = null,
+        Guid? signatureFileId = null,
+        Guid? previousRevisionId = null)
     {
         var appDetailModel = await _appDetailRepo.GetById(appId);
         if (appDetailModel == null)
         {
             return CanRegisterVersionResult.AppDetailNotFound;
         }
-        if (appDetailModel.Type != ApplicationDetailType.Kachemak)
+        if (appDetailModel.Type != ApplicationType.Kachemak)
         {
             return CanRegisterVersionResult.AppDetailInvalidType;
         }
 
-        var existingRevision = await _bullRevisionRepo.GetAllForAppWithVersion(appId, version);
-        if (existingRevision.Any())
+        if (await _bullRevisionRepo.ExistsByApplicationAndVersion(appId, version))
         {
             return CanRegisterVersionResult.VersionAlreadyExists;
         }
 
-        if (!string.IsNullOrEmpty(tag))
+        if (!string.IsNullOrEmpty(tag) && await _bullRevisionRepo.ExistsByApplicationAndTag(appId, tag))
         {
-            var existingTagRevision = await _bullRevisionRepo.GetByTagForApp(appId, tag);
-            if (existingTagRevision != null)
-            {
-                return CanRegisterVersionResult.TagAlreadyExists;
-            }
+            return CanRegisterVersionResult.TagAlreadyExists;
         }
 
         var archiveFile = await _storageFileRepo.GetById(archiveFileId);
@@ -208,32 +203,32 @@ public class BullseyeService : BaseService
             return CanRegisterVersionResult.ArchiveFileNotFound;
         }
 
-        if (string.IsNullOrEmpty(peerToPeerFileId) == false)
+        if (peerToPeerFileId.HasValue)
         {
-            var peerFile = await _storageFileRepo.GetById(peerToPeerFileId);
+            var peerFile = await _storageFileRepo.GetById(peerToPeerFileId.Value);
             if (peerFile == null)
             {
                 return CanRegisterVersionResult.PeerToPeerFileNotFound;
             }
         }
 
-        if (string.IsNullOrEmpty(signatureFileId) == false)
+        if (signatureFileId.HasValue)
         {
-            var signatureFile = await _storageFileRepo.GetById(signatureFileId);
+            var signatureFile = await _storageFileRepo.GetById(signatureFileId.Value);
             if (signatureFile == null)
             {
                 return CanRegisterVersionResult.SignatureFileNotFound;
             }
         }
 
-        if (string.IsNullOrEmpty(previousRevisionId) == false)
+        if (previousRevisionId.HasValue)
         {
-            var previousRevision = await _bullRevisionRepo.GetById(previousRevisionId);
+            var previousRevision = await _bullRevisionRepo.GetById(previousRevisionId.Value);
             if (previousRevision == null)
             {
                 return CanRegisterVersionResult.PreviousRevisionNotFound;
             }
-            if (previousRevision.BullseyeAppId != appId)
+            if (previousRevision.ApplicationId != appId)
             {
                 return CanRegisterVersionResult.PreviousRevisionAppMismatch;
             }
@@ -248,9 +243,9 @@ public class BullseyeService : BaseService
     /// <param name="appId">Bullseye Application Id (<see cref="BullseyeAppModel.ApplicationDetailModelId"/>)</param>
     /// <param name="deleteResources"><inheritdoc cref="ManageBullseyeV1DeleteRequest.DeleteStorageResources" path="/summary"/></param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="appId"/> is null or empty.</exception>
-    public Task<ManageBullseyeV1DeleteResponse> DeleteBullseyeApp(string appId, bool deleteResources)
+    public Task<ManageBullseyeV1DeleteResponse> DeleteBullseyeApp(Guid appId, bool deleteResources)
     {
-        if (string.IsNullOrEmpty(appId))
+        if (appId == Guid.Empty)
         {
             throw new ArgumentException($"{nameof(appId)} is required", nameof(appId));
         }
@@ -267,7 +262,7 @@ public class BullseyeService : BaseService
     /// <exception cref="ArgumentException">Thrown when <see cref="ManageBullseyeV1DeleteRequest.AppId"/> is null or empty.</exception>
     public async Task<ManageBullseyeV1DeleteResponse> DeleteBullseyeApp(ManageBullseyeV1DeleteRequest req)
     {
-        if (string.IsNullOrEmpty(req.AppId))
+        if (req.AppId == Guid.Empty)
         {
             throw new ArgumentException($"{nameof(req.AppId)} is required", nameof(req));
         }
@@ -289,7 +284,7 @@ public class BullseyeService : BaseService
             response.BullseyeAppModel = await _bullseyeAppRepo.GetById(req.AppId);
             if (response.BullseyeAppModel != null)
             {
-                await _bullseyeAppRepo.Delete(response.BullseyeAppModel.Id);
+                await _bullseyeAppRepo.Delete(response.BullseyeAppModel.ApplicationId);
             }
         }
         catch (Exception ex)
@@ -308,25 +303,25 @@ public class BullseyeService : BaseService
                 // deleted if the requester wants that.
                 if (req.IncludeResources)
                 {
-                    if (string.IsNullOrEmpty(revision.ArchiveStorageFileId) == false)
+                    if (revision.ArchiveStorageFileId.HasValue)
                     {
-                        var archiveFile = await _storageFileRepo.GetById(revision.ArchiveStorageFileId);
+                        var archiveFile = await _storageFileRepo.GetById(revision.ArchiveStorageFileId.Value);
                         if (archiveFile != null)
                         {
                             response.DeletedFiles.Add(archiveFile);
                         }
                     }
-                    if (string.IsNullOrEmpty(revision.PeerToPeerStorageFileId) == false)
+                    if (revision.PeerToPeerStorageFileId.HasValue)
                     {
-                        var p2pFile = await _storageFileRepo.GetById(revision.PeerToPeerStorageFileId);
+                        var p2pFile = await _storageFileRepo.GetById(revision.PeerToPeerStorageFileId.Value);
                         if (p2pFile != null)
                         {
                             response.DeletedFiles.Add(p2pFile);
                         }
                     }
-                    if (string.IsNullOrEmpty(revision.SignatureStorageFileId) == false)
+                    if (revision.SignatureStorageFileId.HasValue)
                     {
-                        var signatureFile = await _storageFileRepo.GetById(revision.SignatureStorageFileId);
+                        var signatureFile = await _storageFileRepo.GetById(revision.SignatureStorageFileId.Value);
                         if (signatureFile != null)
                         {
                             response.DeletedFiles.Add(signatureFile);
@@ -346,7 +341,7 @@ public class BullseyeService : BaseService
         // v1
         try
         {
-            response.LatestV1CacheModel = await _bullCacheV1Repo.GetForApp(req.AppId, false);
+            response.LatestV1CacheModel = await _bullCacheV1Repo.GetByAppId(req.AppId, false);
         }
         catch (Exception ex)
         {
@@ -354,7 +349,7 @@ public class BullseyeService : BaseService
         }
         try
         {
-            response.LatestLiveV1CacheModel = await _bullCacheV1Repo.GetForApp(req.AppId, true);
+            response.LatestLiveV1CacheModel = await _bullCacheV1Repo.GetByAppId(req.AppId, true);
         }
         catch (Exception ex)
         {
@@ -415,18 +410,19 @@ public class BullseyeService : BaseService
         return response;
     }
 
-    public async Task<ManageBullseyeV1DeleteRevisionResponse> DeleteBullseyeRevision(string revisionId)
+    public async Task<ManageBullseyeV1DeleteRevisionResponse> DeleteBullseyeRevision(Guid revisionId)
     {
-        if (string.IsNullOrEmpty(revisionId))
+        // TODO fix error logging
+        if (revisionId == Guid.Empty)
         {
-            throw new ArgumentException($"Must not be null or empty", nameof(revisionId));
+            throw new ArgumentException($"Cannot be empty ({Guid.Empty})", nameof(revisionId));
         }
         var response = new ManageBullseyeV1DeleteRevisionResponse()
         {
-            RequestRevisionId = revisionId.ToLower().Trim()
+            RequestRevisionId = revisionId
         };
 
-        BullseyeAppRevisionModel? revisionModel = null;
+        BullseyeRevisionModel? revisionModel = null;
         try
         {
             revisionModel = await _bullRevisionRepo.GetById(revisionId);
@@ -442,15 +438,15 @@ public class BullseyeService : BaseService
             return response;
         }
 
-        BullseyeAppModel? appModel = null;
+        ApplicationBullseyeModel? appModel = null;
         try
         {
-            appModel = await _bullseyeAppRepo.GetById(revisionModel.BullseyeAppId);
+            appModel = await _bullseyeAppRepo.GetById(revisionModel.ApplicationId);
             if (appModel == null)
             {
                 throw new NoNullAllowedException($"{nameof(_bullseyeAppRepo)}.{nameof(_bullseyeAppRepo.GetById)} returned null");
             }
-            var before = JsonSerializer.Deserialize<BullseyeAppModel>(JsonSerializer.Serialize(appModel, BaseService.SerializerOptions), BaseService.SerializerOptions);
+            var before = JsonSerializer.Deserialize<ApplicationBullseyeModel>(JsonSerializer.Serialize(appModel, BaseService.SerializerOptions), BaseService.SerializerOptions);
             if (appModel.LatestRevisionId == revisionModel.Id)
             {
                 appModel.LatestRevisionId = null;
@@ -463,11 +459,11 @@ public class BullseyeService : BaseService
             response.BullseyeAppComparisonException = new(ex);
         }
 
-        if (!string.IsNullOrEmpty(revisionModel.ArchiveStorageFileId))
+        if (revisionModel.ArchiveStorageFileId.HasValue)
         {
             try
             {
-                var fileModel = await _storageFileRepo.GetById(revisionModel.ArchiveStorageFileId);
+                var fileModel = await _storageFileRepo.GetById(revisionModel.ArchiveStorageFileId.Value);
                 if (fileModel != null)
                 {
                     response.DeletedFiles.Add(fileModel);
@@ -478,11 +474,11 @@ public class BullseyeService : BaseService
                 _log.Error($"{nameof(revisionId)}={revisionId}|delete={nameof(revisionModel.ArchiveStorageFileId)}|{ex}");
             }
         }
-        if (!string.IsNullOrEmpty(revisionModel.PeerToPeerStorageFileId))
+        if (revisionModel.PeerToPeerStorageFileId.HasValue)
         {
             try
             {
-                var fileModel = await _storageFileRepo.GetById(revisionModel.PeerToPeerStorageFileId);
+                var fileModel = await _storageFileRepo.GetById(revisionModel.PeerToPeerStorageFileId.Value);
                 if (fileModel != null)
                 {
                     response.DeletedFiles.Add(fileModel);
@@ -493,11 +489,11 @@ public class BullseyeService : BaseService
                 _log.Error($"{nameof(revisionId)}={revisionId}|delete={nameof(revisionModel.PeerToPeerStorageFileId)}|{ex}");
             }
         }
-        if (!string.IsNullOrEmpty(revisionModel.SignatureStorageFileId))
+        if (revisionModel.SignatureStorageFileId.HasValue)
         {
             try
             {
-                var fileModel = await _storageFileRepo.GetById(revisionModel.SignatureStorageFileId);
+                var fileModel = await _storageFileRepo.GetById(revisionModel.SignatureStorageFileId.Value);
                 if (fileModel != null)
                 {
                     response.DeletedFiles.Add(fileModel);
@@ -505,7 +501,7 @@ public class BullseyeService : BaseService
             }
             catch (Exception ex)
             {
-                _log.Error($"{nameof(revisionId)}={revisionId}|delete={nameof(revisionModel.SignatureStorageFileId)}|{ex}");
+                _log.Error(ex, $"{nameof(revisionId)}={revisionId}|delete={nameof(revisionModel.SignatureStorageFileId)} {revisionModel.SignatureStorageFileId}");
             }
         }
 
@@ -513,20 +509,18 @@ public class BullseyeService : BaseService
         {
             try
             {
-                if (!string.IsNullOrEmpty(patch.StorageFileId))
+                var file = await _storageFileRepo.GetById(patch.StorageFileId);
+                if (file != null)
                 {
-                    var file = await _storageFileRepo.GetById(patch.StorageFileId);
-                    if (file != null)
-                    {
-                        response.DeletedFiles.Add(file);
-                    }
+                    response.DeletedFiles.Add(file);
                 }
-                if (!string.IsNullOrEmpty(patch.PeerToPeerStorageFileId))
+
+                if (patch.PeerToPeerStorageFileId.HasValue)
                 {
-                    var file = await _storageFileRepo.GetById(patch.PeerToPeerStorageFileId);
-                    if (file != null)
+                    var p2pFile = await _storageFileRepo.GetById(patch.PeerToPeerStorageFileId.Value);
+                    if (p2pFile != null)
                     {
-                        response.DeletedFiles.Add(file);
+                        response.DeletedFiles.Add(p2pFile);
                     }
                 }
                 await _bullseyePatchRepo.Delete(patch.Id);
@@ -542,8 +536,8 @@ public class BullseyeService : BaseService
         {
             if (appModel != null)
             {
-                await _bullseyeCacheService.GenerateCache(appModel.Id, true, true);
-                await _bullseyeCacheService.GenerateCache(appModel.Id, false, false);
+                await _bullseyeCacheService.GenerateCache(appModel.ApplicationId, true, true);
+                await _bullseyeCacheService.GenerateCache(appModel.ApplicationId, false, false);
             }
         }
         catch (Exception ex)
@@ -568,12 +562,8 @@ public class BullseyeService : BaseService
         return response;
     }
 
-    public async Task<ManageBullseyeV1DeletePatchResponse> DeletePatch(string patchId)
+    public async Task<ManageBullseyeV1DeletePatchResponse> DeletePatch(Guid patchId)
     {
-        if (string.IsNullOrEmpty(patchId))
-        {
-            throw new ArgumentException($"Must not be null or empty", nameof(patchId));
-        }
         ManageBullseyeV1DeletePatchResponse result = new()
         {
             RequestPatchId = patchId
@@ -593,7 +583,7 @@ public class BullseyeService : BaseService
             return result;
         }
 
-        if (!string.IsNullOrEmpty(result.DeletedPatch!.StorageFileId))
+        if (result.DeletedPatch?.StorageFileId != null)
         {
             try
             {
@@ -610,11 +600,11 @@ public class BullseyeService : BaseService
                 result.DeleteFileExceptions[result.DeletedPatch!.StorageFileId] = new(ex);
             }
         }
-        if (!string.IsNullOrEmpty(result.DeletedPatch!.PeerToPeerStorageFileId))
+        if (result.DeletedPatch?.PeerToPeerStorageFileId.HasValue ?? false)
         {
             try
             {
-                var file = await _storageFileRepo.GetById(result.DeletedPatch!.PeerToPeerStorageFileId);
+                var file = await _storageFileRepo.GetById(result.DeletedPatch!.PeerToPeerStorageFileId.Value);
                 if (file != null)
                 {
                     await _storageService.Delete(file);

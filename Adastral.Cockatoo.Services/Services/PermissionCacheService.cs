@@ -26,7 +26,7 @@ public class PermissionCacheService : BaseService
     private readonly GroupPermissionApplicationRepository _groupPermAppRepo;
     private readonly GroupUserAssociationRepository _groupUserAssocRepo;
 
-    private readonly ApplicationDetailRepository _appRepo;
+    private readonly ApplicationRepository _appRepo;
     private readonly UserPermissionGlobalCacheRepository _userPermGlobalCacheRepo;
     private readonly UserPermissionApplicationCacheRepository _userPermAppCacheRepo;
     private readonly IDistributedCache _distCache;
@@ -43,7 +43,7 @@ public class PermissionCacheService : BaseService
 
         _userPermGlobalCacheRepo = services.GetRequiredService<UserPermissionGlobalCacheRepository>();
         _userPermAppCacheRepo = services.GetRequiredService<UserPermissionApplicationCacheRepository>();
-        _appRepo = services.GetRequiredService<ApplicationDetailRepository>();
+        _appRepo = services.GetRequiredService<ApplicationRepository>();
         _distCache = services.GetRequiredService<IDistributedCache>();
     }
 
@@ -86,7 +86,7 @@ public class PermissionCacheService : BaseService
     /// </summary>
     /// <param name="userId">Id of <see cref="UserModel"/></param>
     /// <returns>List of permissions the user has.</returns>
-    public async Task<List<PermissionKind>> GetUser(string userId)
+    public async Task<List<PermissionKind>> GetUser(Guid userId)
     {
         var stringContent = await _distCache.GetStringAsync(GetGlobalUserKey(userId));
         if (string.IsNullOrEmpty(stringContent))
@@ -106,7 +106,7 @@ public class PermissionCacheService : BaseService
     /// <param name="userId">Id of <see cref="UserModel"/></param>
     /// <param name="applicationId">Id of <see cref="ApplicationDetailModel"/></param>
     /// <returns>List of application permissions this user has for the specified application.</returns>
-    public async Task<List<ScopedApplicationPermissionKind>> GetUserByApplication(string userId, string applicationId)
+    public async Task<List<ScopedApplicationPermissionKind>> GetUserByApplication(Guid userId, Guid applicationId)
     {
         var userPermissions = await GetUser(userId);
 
@@ -148,19 +148,19 @@ public class PermissionCacheService : BaseService
     public class RecalculateUserResult
     {
         public required UserPermissionGlobalCacheModel GlobalCache { get; set; }
-        public Dictionary<string, UserPermissionApplicationCacheModel> ApplicationCache { get; set; } = [];
+        public Dictionary<Guid, UserPermissionApplicationCacheModel> ApplicationCache { get; set; } = [];
     }
 
     /// <summary>
     /// Calculate permissions for the <paramref name="userId"/> provided.
     /// </summary>
     /// <param name="userId">Id of <see cref="UserModel"/></param>
-    public async Task<RecalculateUserResult> CalculateUser(string userId)
+    public async Task<RecalculateUserResult> CalculateUser(Guid userId)
     {
         var groupAssociations = await _groupUserAssocRepo.GetAllForUser(userId);
         var groups = await _groupRepo.GetManyById(groupAssociations.Select(v => v.GroupId).ToArray());
         var globalPermissions = new Dictionary<PermissionKind, bool>();
-        var applicationPermissions = new Dictionary<string, Dictionary<ScopedApplicationPermissionKind, bool>>();
+        var applicationPermissions = new Dictionary<Guid, Dictionary<ScopedApplicationPermissionKind, bool>>();
         foreach (var app in await _appRepo.GetAll())
         {
             applicationPermissions[app.Id] = [];
@@ -203,7 +203,7 @@ public class PermissionCacheService : BaseService
         var globalCacheModel = new UserPermissionGlobalCacheModel()
         {
             UserId = userId,
-            Permissions = globalPermissions.Where(v => v.Value == true).Select(v => v.Key).ToList()
+            Permissions = globalPermissions.Where(v => v.Value).Select(v => v.Key).ToList()
         };
         await _userPermGlobalCacheRepo.InsertOrUpdate(globalCacheModel);
         await _distCache.SetStringAsync(GetGlobalUserKey(userId), JsonSerializer.Serialize(globalCacheModel.Permissions, SerializerOptions));
@@ -217,7 +217,7 @@ public class PermissionCacheService : BaseService
             {
                 UserId = userId,
                 ApplicationId = appId,
-                Permissions = data.Where(v => v.Value == true).Select(v => v.Key).ToList()
+                Permissions = data.Where(v => v.Value).Select(v => v.Key).ToList()
             };
             await _userPermAppCacheRepo.InsertOrUpdate(appCacheModel);
             await _distCache.SetStringAsync(GetApplicationUserKey(userId, appId), JsonSerializer.Serialize(appCacheModel.Permissions, SerializerOptions));
@@ -229,7 +229,7 @@ public class PermissionCacheService : BaseService
     /// Calculate permissions for the <paramref name="groupId"/> provided.
     /// </summary>
     /// <param name="groupId">Id of <see cref="GroupModel"/></param>
-    public async Task CalculateGroup(string groupId)
+    public async Task CalculateGroup(Guid groupId)
     {
         var associations = await _groupUserAssocRepo.GetAllForGroup(groupId);
         foreach (var assoc in associations)
@@ -245,11 +245,11 @@ public class PermissionCacheService : BaseService
                 {
                     try
                     {
-                        await _groupUserAssocRepo.Delete(assoc.Id);
+                        await _groupUserAssocRepo.HardDeleteById(assoc.Id);
                     }
                     catch (Exception ex)
                     {
-                        _log.Warn($"Failed to delete unreferenced Group->User association (since the user doesn't exist anymore)\n{ex}");
+                        _log.Warn(ex, $"Failed to delete unreferenced Group->User association (since the user doesn't exist anymore)");
                     }
                 }
             }
@@ -260,12 +260,12 @@ public class PermissionCacheService : BaseService
         }
     }
 
-    private string GetGlobalUserKey(string userId)
+    private string GetGlobalUserKey(Guid userId)
     {
         return $"{nameof(PermissionCacheService)},global,{nameof(userId)}={userId}";
     }
 
-    private string GetApplicationUserKey(string userId, string appId)
+    private string GetApplicationUserKey(Guid userId, Guid appId)
     {
         return $"{nameof(PermissionCacheService)},application,{nameof(userId)}={userId},{nameof(appId)}={appId}";
     }
@@ -282,7 +282,7 @@ public class PermissionCacheService : BaseService
             }
             catch (Exception ex)
             {
-                _log.Error($"Could not calculate permissions for user {user.Id}\n{ex}");
+                _log.Error(ex, $"Could not calculate permissions for user {user.Id}");
             }
         }
     }

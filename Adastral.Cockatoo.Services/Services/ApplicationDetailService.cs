@@ -10,8 +10,6 @@ using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Models.AutoUpdaterDotNet;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Adastral.Cockatoo.DataAccess.Repositories.AutoUpdaterDotNet;
-using Adastral.Cockatoo.DataAccess.Repositories.Group;
-using Microsoft.Diagnostics.Tracing.Parsers.FrameworkEventSource;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Driver;
@@ -21,7 +19,7 @@ namespace Adastral.Cockatoo.Services;
 [CockatooDependency]
 public class ApplicationDetailService : BaseService
 {
-    private readonly ApplicationDetailRepository _appDetailRepo;
+    private readonly ApplicationRepository _appDetailRepo;
     private readonly StorageService _storageService;
     private readonly StorageFileRepository _storageFileRepo;
     private readonly AUDNRevisionRepository _audnRevisionRepo;
@@ -35,7 +33,7 @@ public class ApplicationDetailService : BaseService
         : base(services)
     {
         _config = services.GetRequiredService<CockatooConfig>();
-        _appDetailRepo = services.GetRequiredService<ApplicationDetailRepository>();
+        _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
         _storageService = services.GetRequiredService<StorageService>();
         _storageFileRepo = services.GetRequiredService<StorageFileRepository>();
         _audnRevisionRepo = services.GetRequiredService<AUDNRevisionRepository>();
@@ -50,17 +48,12 @@ public class ApplicationDetailService : BaseService
     {
         #region Constructors
         public AUDNXMLCacheKey()
-            : this(Guid.Empty.ToString())
+            : this(Guid.Empty)
         {
         }
 
-        public AUDNXMLCacheKey(string appId, bool includeDisabled = false)
+        public AUDNXMLCacheKey(Guid appId, bool includeDisabled = false)
         {
-            if (string.IsNullOrEmpty(appId))
-            {
-                throw new ArgumentException($"Cannot be null or empty", nameof(appId));
-            }
-
             AppId = appId;
             IncludeDisabled = includeDisabled;
         }
@@ -68,8 +61,8 @@ public class ApplicationDetailService : BaseService
 
         [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
         public string Type => CockatooHelper.FormatTypeName(GetType());
-        [DefaultValue("")]
-        public string AppId { get; set; }
+
+        public Guid AppId { get; set; }
 
         [DefaultValue((false))]
         public bool IncludeDisabled { get; set; }
@@ -80,9 +73,9 @@ public class ApplicationDetailService : BaseService
         }
     }
 
-    private string? GetAUDNXMLCache(string appID, bool includeDisabled = false)
+    private string? GetAUDNXMLCache(Guid appId, bool includeDisabled = false)
     {
-        var key = new AUDNXMLCacheKey(appID, includeDisabled);
+        var key = new AUDNXMLCacheKey(appId, includeDisabled);
         var keyJson = key.ToJson();
         var data = _cache.GetString(keyJson);
         if (data == null)
@@ -91,25 +84,25 @@ public class ApplicationDetailService : BaseService
         return data;
     }
 
-    public async Task<string?> GetAUDNXML(string appId, bool includeDisabled = false, bool force = false)
+    public async Task<string?> GetAUDNXML(Guid appId, bool includeDisabled = false, bool force = false)
     {
         var xmlString = GetAUDNXMLCache(appId, includeDisabled);
-        if (xmlString != null && force == false)
+        if (xmlString != null && !force)
         {
             return xmlString;
         }
         return await GenerateAUDNXML(appId, includeDisabled);
     }
-    public async Task<string?> GenerateAUDNXML(string appId, bool includeDisabled = false)
+    public async Task<string?> GenerateAUDNXML(Guid appId, bool includeDisabled = false)
     {
         var app = await _appDetailRepo.GetById(appId);
         if (app == null)
         {
             throw new ArgumentException($"Could not find Application with Id {appId}", nameof(appId));
         }
-        if (app.Type != ApplicationDetailType.AutoUpdaterDotNet)
+        if (app.Type != ApplicationType.AutoUpdaterDotNet)
         {
-            throw new ValidationException($"Application {app.Id} type is invalid, must be {ApplicationDetailType.AutoUpdaterDotNet} but it's {app.Type}");
+            throw new ValidationException($"Application {app.Id} type is invalid, must be {ApplicationType.AutoUpdaterDotNet} but it's {app.Type}");
         }
 
         var latest = await _audnRevisionRepo.GetLatestForApp(app.Id, includeDisabled);
@@ -157,16 +150,16 @@ public class ApplicationDetailService : BaseService
     /// Get the XML content for the latest revision in <see cref="AUDNRevisionRepository"/>.
     /// </summary>
     /// <returns>Will return <see langword="null"/> when there is no latest version.</returns>
-    public async Task<string?> GenerateAUDNXMLManual(string appId, bool includeDisabled = false)
+    public async Task<string?> GenerateAUDNXMLManual(Guid appId, bool includeDisabled = false)
     {
         var app = await _appDetailRepo.GetById(appId);
         if (app == null)
         {
             throw new ArgumentException($"Could not find Application with Id {appId}", nameof(appId));
         }
-        if (app.Type != ApplicationDetailType.AutoUpdaterDotNet)
+        if (app.Type != ApplicationType.AutoUpdaterDotNet)
         {
-            throw new ValidationException($"Application {app.Id} type is invalid, must be {ApplicationDetailType.AutoUpdaterDotNet} but it's {app.Type}");
+            throw new ValidationException($"Application {app.Id} type is invalid, must be {ApplicationType.AutoUpdaterDotNet} but it's {app.Type}");
         }
 
         var latest = await _audnRevisionRepo.GetLatestForApp(app.Id, includeDisabled);
@@ -191,7 +184,7 @@ public class ApplicationDetailService : BaseService
         if (latest.Mandatory)
         {
             var attrs = new List<string>();
-            if (latest.MandatoryKind != AUDNMandatoryKind.Normal)
+            if (latest.MandatoryKind != AutoUpdaterDotNetMandatoryKind.Normal)
             {
                 attrs.Add($"mode=\"{(int)latest.MandatoryKind}\"");
             }
@@ -224,13 +217,14 @@ public class ApplicationDetailService : BaseService
         return string.Join("\n", resultLines);
     }
 
-    public async Task Delete(string appId)
+    public async Task Delete(Guid appId, UserModel? deletedByUser = null)
     {
+        // TODO refactor to soft delete instead of hard delete
         var model = await _appDetailRepo.GetById(appId);
         if (model == null)
         {
             throw new ArgumentException(
-                $"Could not find {nameof(ApplicationDetailModel)} with Id {appId}", nameof(appId));
+                $"Could not find {nameof(ApplicationModel)} with Id {appId}", nameof(appId));
         }
 
         using (var session = await _mongoClient.StartSessionAsync())
@@ -242,7 +236,7 @@ public class ApplicationDetailService : BaseService
                 await _bullseyeService.DeleteBullseyeApp(model.Id, true);
                 var appPermissions = await _groupPermissionAppRepo.GetManyByApplication(model.Id);
                 await _groupPermissionAppRepo.Delete(appPermissions.Select(v => v.Id).ToArray());
-                await _appDetailRepo.DeleteById(model.Id);
+                await _appDetailRepo.DeleteById(deletedByUser, model.Id);
                 
                 foreach (var x in appPermissions)
                 {
@@ -252,7 +246,7 @@ public class ApplicationDetailService : BaseService
             catch (Exception ex)
             {
                 await session.AbortTransactionAsync();
-                throw new ApplicationException($"Failed to delete Application {model.DisplayName} ({model.Id})", ex);
+                throw new InvalidOperationException($"Failed to delete Application {model.DisplayName} ({model.Id})", ex);
             }
 
             await session.CommitTransactionAsync();

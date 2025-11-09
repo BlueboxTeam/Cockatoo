@@ -1,7 +1,6 @@
 
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
 namespace Adastral.Cockatoo.DataAccess.Models;
@@ -16,8 +15,11 @@ public class ApplicationSourceModModel
     public Guid ApplicationId { get; set; }
 
     /// <summary>
-    /// Source Mod Directory Name for this application
+    /// Source Mod Directory Name for this application.
     /// </summary>
+    /// <remarks>
+    /// Property was previously called "SourceModName" in MongoDB class "AppVarModDetail"
+    /// </remarks>
     [JsonPropertyName("sm_name")]
     [MaxLength(64)]
     public string FolderName { get; set; } = "";

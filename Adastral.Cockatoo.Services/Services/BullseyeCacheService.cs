@@ -2,7 +2,6 @@ using Adastral.Cockatoo.Common;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Bson.IO;
 using NLog;
 
 namespace Adastral.Cockatoo.Services;
@@ -14,7 +13,7 @@ public class BullseyeCacheService : BaseService
     private readonly BullseyeAppRepository _bullAppRepo;
     private readonly BullseyeAppRevisionRepository _bullAppRevRepo;
     private readonly BullseyePatchRepository _bullPatchRepo;
-    private readonly ApplicationDetailRepository _appDetailRepo;
+    private readonly ApplicationRepository _appDetailRepo;
     private readonly StorageFileRepository _storageFileRepo;
     private readonly StorageService _storageService;
     private readonly BullseyeV1CacheRepository _bullV1CacheRepo;
@@ -26,7 +25,7 @@ public class BullseyeCacheService : BaseService
         _bullAppRevRepo = services.GetRequiredService<BullseyeAppRevisionRepository>();
         _bullPatchRepo = services.GetRequiredService<BullseyePatchRepository>();
 
-        _appDetailRepo = services.GetRequiredService<ApplicationDetailRepository>();
+        _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
         _storageFileRepo = services.GetRequiredService<StorageFileRepository>();
         _storageService = services.GetRequiredService<StorageService>();
 
@@ -58,17 +57,17 @@ public class BullseyeCacheService : BaseService
     /// <param name="appId"><see cref="BullseyeAppModel.ApplicationDetailModelId"/></param>
     /// <param name="publishedOnly">When set to <see langword="true"/>, then only revisions that are live will be used.</param>
     /// <param name="setLiveState">When not <see langword="null"/>, the IsLive value for <see cref="BullseyeV1CacheModel"/>/<see cref="BullseyeV2CacheModel"/> will be set to it.</param>
-    public async Task<GenerateCacheResult> GenerateCache(string appId, bool publishedOnly, bool? setLiveState = null)
+    public async Task<GenerateCacheResult> GenerateCache(Guid appId, bool publishedOnly, bool? setLiveState = null)
     {
         var appDetail = await _appDetailRepo.GetById(appId);
         if (appDetail == null)
         {
-            throw new Exception($"Could not find {nameof(ApplicationDetailModel)} with Id {appId}");
+            throw new ArgumentException($"Could not find Application with Id {appId}", nameof(appId));
         }
         var bullApp = await _bullAppRepo.GetById(appId);
         bool isNewApp = bullApp == null;
         bullApp ??= new();
-        bullApp.ApplicationDetailModelId = appId;
+        bullApp.ApplicationId = appId;
         if (isNewApp)
         {
             await _bullAppRepo.InsertOrUpdate(bullApp);
@@ -77,27 +76,31 @@ public class BullseyeCacheService : BaseService
         var v1 = new BullseyeV1();
         var v2 = new BullseyeV2()
         {
-            Name = appDetail.AppVarData.Mod.SourceModName,
+            Name = appDetail.SourceMod.FolderName,
             SchemaVersion = 2
         };
         v2.SetLastUpdated();
         var revisions = await _bullAppRevRepo.GetAllForApp(appId, publishedOnly ? true : null);
         var revisionDict = revisions.ToDictionary(v => v.Id, v => v);
-        BullseyeAppRevisionModel? highestVersion = null;
-        var toPatchIds = new List<(string, string)>();
+        BullseyeRevisionModel? highestVersion = null;
+        var toPatchIds = new List<(Guid, string)>();
         foreach (var item in revisions.OrderBy(v => v.Version))
         {
             var v1VersionInfo = new BullseyeV1VersionInfo();
             var v2VersionInfo = new BullseyeV2VersionInfo();
-            if (string.IsNullOrEmpty(item.Tag) == false)
+            if (!string.IsNullOrEmpty(item.Tag))
             {
                 v2VersionInfo.Tag = item.Tag;
             }
 
-            var archiveFile = await _storageFileRepo.GetById(item.ArchiveStorageFileId);
-            if (string.IsNullOrEmpty(item.SignatureStorageFileId) == false)
+            StorageFileModel? archiveFile = null;
+            if (item.ArchiveStorageFileId.HasValue)
             {
-                var signatureFile = await _storageFileRepo.GetById(item.SignatureStorageFileId);
+                archiveFile = await _storageFileRepo.GetById(item.ArchiveStorageFileId.Value);
+            }
+            if (item.SignatureStorageFileId.HasValue)
+            {
+                var signatureFile = await _storageFileRepo.GetById(item.SignatureStorageFileId.Value);
                 if (signatureFile != null)
                 {
                     v1VersionInfo.SignatureUrl = _storageService.GetUrl(signatureFile);
@@ -105,9 +108,9 @@ public class BullseyeCacheService : BaseService
                 }
             }
 
-            if (string.IsNullOrEmpty(item.PeerToPeerStorageFileId) == false)
+            if (item.PeerToPeerStorageFileId.HasValue)
             {
-                var torrentFile = await _storageFileRepo.GetById(item.PeerToPeerStorageFileId);
+                var torrentFile = await _storageFileRepo.GetById(item.PeerToPeerStorageFileId.Value);
                 if (torrentFile != null)
                 {
                     v1VersionInfo.TorrentUrl = _storageService.GetUrl(torrentFile);
@@ -118,35 +121,35 @@ public class BullseyeCacheService : BaseService
             {
                 v1VersionInfo.Filename = _storageService.GetUrl(archiveFile);
                 v2VersionInfo.Filename = _storageService.GetUrl(archiveFile);
-                v2VersionInfo.FileSize = archiveFile.GetSize();
+                v2VersionInfo.FileSize = archiveFile.Size;
             }
-            v2VersionInfo.ExtractedSize = item.GetExtractedArchiveSize();
+            v2VersionInfo.ExtractedSize = item.Size;
 
 
-            if (string.IsNullOrEmpty(item.PreviousRevisionId) == false)
+            if (item.PreviousRevisionId.HasValue)
             {
-                var previous = revisions.Where(v => v.Id == item.PreviousRevisionId).FirstOrDefault();
+                var previous = revisions.FirstOrDefault(v => v.Id == item.PreviousRevisionId);
                 if (previous != null)
                 {
-                    v2VersionInfo.PreviousVersionKey = previous.GetVersion().ToString();
+                    v2VersionInfo.PreviousVersionKey = previous.Version.ToString();
                 }
             }
 
-            if (highestVersion == null || highestVersion.GetVersion() < item.GetVersion())
+            if (highestVersion == null || highestVersion.Version < item.Version)
             {
                 highestVersion = item;
             }
 
-            var versionId = item.GetVersion().ToString();
+            var versionId = item.Version.ToString();
             v1.Versions[versionId] = v1VersionInfo;
             v2.Versions[versionId] = v2VersionInfo;
             v1.Patches[versionId] = new();
             v2.Patches[versionId] = new();
             toPatchIds.Add((item.Id, versionId));
         }
-        if (string.IsNullOrEmpty(bullApp.LatestRevisionId) == false)
+        if (bullApp.LatestRevisionId.HasValue)
         {
-            var latest = await _bullAppRevRepo.GetById(bullApp.LatestRevisionId);
+            var latest = await _bullAppRevRepo.GetById(bullApp.LatestRevisionId.Value);
             if (latest != null)
             {
                 highestVersion = latest;
@@ -171,9 +174,9 @@ public class BullseyeCacheService : BaseService
                 var patchFile = await _storageFileRepo.GetById(source.StorageFileId);
                 v1Item.TorrentUrl = null;
                 v2Item.TorrentFilename = null;
-                if (string.IsNullOrEmpty(source.PeerToPeerStorageFileId) == false)
+                if (source.PeerToPeerStorageFileId.HasValue)
                 {
-                    var torrentFile = await _storageFileRepo.GetById(source.PeerToPeerStorageFileId);
+                    var torrentFile = await _storageFileRepo.GetById(source.PeerToPeerStorageFileId.Value);
                     if (torrentFile != null)
                     {
                         v1Item.TorrentUrl = _storageService.GetUrl(torrentFile);
@@ -183,7 +186,7 @@ public class BullseyeCacheService : BaseService
                 if (patchFile != null)
                 {
                     v1Item.Filename = _storageService.GetUrl(patchFile);
-                    v1Item.TemporarySpaceRequired = patchFile.GetSize() ?? 0;
+                    v1Item.TemporarySpaceRequired = patchFile.Size ?? 0;
                     v2Item.Filename = v1Item.Filename;
                     v2Item.FileSize = v1Item.TemporarySpaceRequired;
                     v2Item.TemporarySpaceRequired = v2Item.FileSize * 2;
@@ -191,15 +194,15 @@ public class BullseyeCacheService : BaseService
 
                 if (toPatchId == highestVersion?.Id)
                 {
-                    v1.Patches[sourceRevision.GetVersion().ToString()] = v1Item;
+                    v1.Patches[sourceRevision.Version.ToString()] = v1Item;
                 }
-                v2.Patches[targetVersionId][sourceRevision.GetVersion().ToString()] = v2Item;
+                v2.Patches[targetVersionId][sourceRevision.Version.ToString()] = v2Item;
             }
         }
 
         if (highestVersion != null)
         {
-            v2.LatestVersion = highestVersion.Version;
+            v2.LatestVersion = highestVersion.Version.ToString();
         }
 
         var v1Cache = new BullseyeV1CacheModel()
@@ -207,15 +210,15 @@ public class BullseyeCacheService : BaseService
             IsLive = setLiveState == null
                 ? publishedOnly
                 : (bool)setLiveState,
-            TargetAppId = appId,
+            ApplicationId = appId,
+            Content = v1
         };
         var v2Cache = new BullseyeV2CacheModel()
         {
             IsLive = v1Cache.IsLive,
-            TargetAppId = appId
+            ApplicationId = appId,
+            Content = v2
         };
-        v1Cache.SetContent(v1);
-        v2Cache.SetContent(v2);
 
         await _bullV1CacheRepo.InsertOrUpdate(v1Cache);
         await _bullV2CacheRepo.InsertOrUpdate(v2Cache);
@@ -228,31 +231,31 @@ public class BullseyeCacheService : BaseService
     }
 
     private static readonly Mutex GetLatestV1GenerateMutex = new();
-    public async Task<BullseyeV1> GetLatestV1(string appId, bool? liveState = null)
+    public async Task<BullseyeV1> GetLatestV1(Guid appId, bool? liveState = null)
     {
-        var cacheModel = await _bullV1CacheRepo.GetForApp(appId, liveState);
+        var cacheModel = await _bullV1CacheRepo.GetByAppId(appId, liveState);
         if (cacheModel == null)
         {
             GetLatestV1GenerateMutex.WaitOne();
             // generate new cache, and include non-live patches when liveState isn't null and it's false
-            var res = await GenerateCache(appId, liveState == null ? true : (bool)liveState, liveState);
+            var res = await GenerateCache(appId, liveState == null || (bool)liveState, liveState);
             GetLatestV1GenerateMutex.ReleaseMutex();
-            return res.V1.GetContent()!;
+            return res.V1.Content;
         }
-        return cacheModel.GetContent()!;
+        return cacheModel.Content;
     }
     private static readonly Mutex GetLatestV2GenerateMutex = new();
-    public async Task<BullseyeV2> GetLatestV2(string appId, bool? liveState = null)
+    public async Task<BullseyeV2> GetLatestV2(Guid appId, bool? liveState = null)
     {
         var cacheModel = await _bullV2CacheRepo.GetByAppId(appId, liveState);
         if (cacheModel == null)
         {
             GetLatestV2GenerateMutex.WaitOne();
             // generate new cache, and include non-live patches when liveState isn't null and it's false
-            var res = await GenerateCache(appId, liveState == null ? true : (bool)liveState, liveState);
+            var res = await GenerateCache(appId, liveState == null || (bool)liveState, liveState);
             GetLatestV2GenerateMutex.ReleaseMutex();
-            return res.V2.GetContent()!;
+            return res.V2.Content;
         }
-        return cacheModel.GetContent()!;
+        return cacheModel.Content;
     }
 }

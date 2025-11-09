@@ -25,7 +25,7 @@ namespace Adastral.Cockatoo.Services.WebApi.Controllers;
 [TrackRequest]
 public class AdminGroupApiV1Controller : Controller
 {
-    private readonly ApplicationDetailRepository _applicationRepo;
+    private readonly ApplicationRepository _applicationRepo;
     private readonly GroupRepository _groupRepo;
     private readonly GroupPermissionGlobalRepository _groupPermGlobalRepo;
     private readonly GroupPermissionApplicationRepository _groupPermApplicationRepo;
@@ -34,7 +34,7 @@ public class AdminGroupApiV1Controller : Controller
     public AdminGroupApiV1Controller(IServiceProvider services)
         : base()
     {
-        _applicationRepo = services.GetRequiredService<ApplicationDetailRepository>();
+        _applicationRepo = services.GetRequiredService<ApplicationRepository>();
         _groupRepo = services.GetRequiredService<GroupRepository>();
         _groupPermGlobalRepo = services.GetRequiredService<GroupPermissionGlobalRepository>();
         _groupPermApplicationRepo = services.GetRequiredService<GroupPermissionApplicationRepository>();

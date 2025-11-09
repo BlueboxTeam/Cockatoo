@@ -6,7 +6,7 @@ public partial class PermissionService
 {
     #region Check Permission
     public async Task<bool> CheckGlobalPermission(
-        string userId,
+        Guid userId,
         PermissionFilterType filterType,
         params PermissionKind[] permissions)
     {
@@ -48,7 +48,7 @@ public partial class PermissionService
     public Task GrantManyGlobalForGroupAsync(GroupModel group, params PermissionKind[] kinds)
         => GrantManyGlobalForGroupAsync(group.Id, kinds);
 
-    public Task GrantManyGlobalForGroupAsync(string groupId, params PermissionKind[] kinds)
+    public Task GrantManyGlobalForGroupAsync(Guid groupId, params PermissionKind[] kinds)
     {
         return SetManyGlobalForGroup(groupId, true, kinds);
     }
@@ -58,7 +58,7 @@ public partial class PermissionService
     public Task DenyManyGlobalForGroupAsync(GroupModel group, params PermissionKind[] kinds)
         => DenyManyGlobalForGroupAsync(group.Id, kinds);
 
-    public Task DenyManyGlobalForGroupAsync(string groupId, params PermissionKind[] kinds)
+    public Task DenyManyGlobalForGroupAsync(Guid groupId, params PermissionKind[] kinds)
     {
         return SetManyGlobalForGroup(groupId, false, kinds);
     }
@@ -67,7 +67,7 @@ public partial class PermissionService
     #region Revoke
     public Task RevokeManyGlobalForGroupAsync(GroupModel group, params PermissionKind[] kinds)
         => RevokeManyGlobalForGroupAsync(group.Id, kinds);
-    public async Task RevokeManyGlobalForGroupAsync(string groupId, params PermissionKind[] kinds)
+    public async Task RevokeManyGlobalForGroupAsync(Guid groupId, params PermissionKind[] kinds)
     {
         var data = await _groupPermissionGlobalRepo.GetManyByGroup(groupId);
         var ids = data.Where(v => kinds.Contains(v.Kind)).Select(v => v.Id).ToArray();
@@ -76,7 +76,7 @@ public partial class PermissionService
     }
     #endregion
 
-    public async Task SetManyGlobalForGroup(string groupId, bool allowValue, params PermissionKind[] kinds)
+    public async Task SetManyGlobalForGroup(Guid groupId, bool allowValue, params PermissionKind[] kinds)
     {
         var data = await _groupPermissionGlobalRepo.GetManyByGroup(groupId) ?? [];
         var existsList = new List<PermissionKind>();
@@ -100,7 +100,7 @@ public partial class PermissionService
             }
         }
 
-        foreach (var item in kinds.Where(v => modelsToPush.Any(x => x.Kind == v) == false))
+        foreach (var item in kinds.Where(v => !modelsToPush.Any(x => x.Kind == v)))
         {
             modelsToPush.Add(new()
             {

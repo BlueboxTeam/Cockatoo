@@ -11,12 +11,12 @@ public class ManageBullseyeV1GenerateCacheResponse
     /// Foreign Key to <see cref="Adastral.Cockatoo.DataAccess.Models.BullseyeV1CacheModel.Id"/>
     /// </summary>
     [JsonPropertyName("v1")]
-    public string CacheV1Id { get; set; } = "";
+    public Guid CacheV1Id { get; set; } = Guid.Empty;
     /// <summary>
     /// Foreign Key to <see cref="Adastral.Cockatoo.DataAccess.Models.BullseyeV2CacheModel.Id"/>
     /// </summary>
     [JsonPropertyName("v2")]
-    public string CacheV2Id { get; set; } = "";
+    public Guid CacheV2Id { get; set; } = Guid.Empty;
     /// <summary>
     /// Was a new record added in <see cref="Adastral.Cockatoo.DataAccess.Repositories.BullseyeAppRepository"/>
     /// </summary>

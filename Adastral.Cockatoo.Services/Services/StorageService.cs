@@ -1,11 +1,9 @@
 ﻿using System.Data;
 using System.Security.Cryptography;
 using Adastral.Cockatoo.Common;
-using Adastral.Cockatoo.Common.Helpers;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Adastral.Cockatoo.DataAccess.Repositories.AutoUpdaterDotNet;
-using kate.shared.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using NLog;
 
@@ -17,7 +15,7 @@ public class StorageService : BaseService
     private readonly StorageFileRepository _storageFileRepo;
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
     private readonly ApplicationImageRepository _appImageRepo;
-    private readonly BullseyeAppRevisionRepository _bullseyeAppRevisionRepo;
+    private readonly BullseyeRevisionRepository _bullseyeAppRevisionRepo;
     private readonly BullseyePatchRepository _bullseyePatchRepo;
     private readonly BlogPostAttachmentRepository _blogPostAttachmentRepo;
     private readonly UserPreferencesRepository _userPrefRepo;
@@ -29,7 +27,7 @@ public class StorageService : BaseService
         _config = services.GetRequiredService<CockatooConfig>();
         _storageFileRepo = services.GetRequiredService<StorageFileRepository>();
         _appImageRepo = services.GetRequiredService<ApplicationImageRepository>();
-        _bullseyeAppRevisionRepo = services.GetRequiredService<BullseyeAppRevisionRepository>();
+        _bullseyeAppRevisionRepo = services.GetRequiredService<BullseyeRevisionRepository>();
         _bullseyePatchRepo = services.GetRequiredService<BullseyePatchRepository>();
         _blogPostAttachmentRepo = services.GetRequiredService<BlogPostAttachmentRepository>();
         _userPrefRepo = services.GetRequiredService<UserPreferencesRepository>();
@@ -39,7 +37,7 @@ public class StorageService : BaseService
     public string GetUrl(StorageFileModel model)
     {
         string location = $"api/v1/File/{model.Id}/Content";
-        if (_config.Storage.FileApi.UseDirect == false)
+        if (!_config.Storage.FileApi.UseDirect)
         {
             location = model.Location;
         }
@@ -53,20 +51,20 @@ public class StorageService : BaseService
         return location;
     }
 
-    public async Task<string?> GetUrl(ApplicationImageModel appImageModel)
+    public async Task<string?> GetUrl(ApplicationBrandAssetModel appImageModel)
     {
         if (appImageModel.IsManagedFile)
         {
-            if (appImageModel.ManagedFileId == null)
+            if (!appImageModel.StorageFileId.HasValue)
             {
                 throw new NoNullAllowedException(
-                    $"{nameof(appImageModel.ManagedFileId)} for {appImageModel.Id} is null when it is required when {appImageModel.IsManagedFile} is true.");
+                    $"{nameof(appImageModel.StorageFileId)} for {appImageModel.ApplicationId},{appImageModel.Type} is null when it is required when {appImageModel.IsManagedFile} is true.");
             }
-            var fileModel = await _storageFileRepo.GetById(appImageModel.ManagedFileId);
+            var fileModel = await _storageFileRepo.GetById(appImageModel.StorageFileId.Value);
             if (fileModel == null)
             {
                 throw new NoNullAllowedException(
-                    $"Could not find {nameof(StorageFileModel)} with Id of {appImageModel.ManagedFileId} for {nameof(ApplicationImageModel)} {appImageModel.Id}");
+                    $"Could not find {nameof(StorageFileModel)} with Id of {appImageModel.StorageFileId} for {nameof(ApplicationBrandAssetModel)} {appImageModel.ApplicationId},{appImageModel.Type}");
             }
 
             return GetUrl(fileModel);
@@ -77,20 +75,20 @@ public class StorageService : BaseService
         }
     }
 
-    public async Task<string?> GetHash(ApplicationImageModel appImageModel)
+    public async Task<string?> GetHash(ApplicationBrandAssetModel appImageModel)
     {
         if (appImageModel.IsManagedFile)
         {
-            if (appImageModel.ManagedFileId == null)
+            if (!appImageModel.StorageFileId.HasValue)
             {
                 throw new NoNullAllowedException(
-                    $"{nameof(appImageModel.ManagedFileId)} for {appImageModel.Id} is null when it is required when {appImageModel.IsManagedFile} is true.");
+                    $"{nameof(appImageModel.StorageFileId)} for {appImageModel.ApplicationId},{appImageModel.Type} is null when it is required when {appImageModel.IsManagedFile} is true.");
             }
-            var fileModel = await _storageFileRepo.GetById(appImageModel.ManagedFileId);
+            var fileModel = await _storageFileRepo.GetById(appImageModel.StorageFileId.Value);
             if (fileModel == null)
             {
                 throw new NoNullAllowedException(
-                    $"Could not find {nameof(StorageFileModel)} with Id of {appImageModel.ManagedFileId} for {nameof(ApplicationImageModel)} {appImageModel.Id}");
+                    $"Could not find {nameof(StorageFileModel)} with Id of {appImageModel.StorageFileId} for {nameof(ApplicationBrandAssetModel)} {appImageModel.ApplicationId},{appImageModel.Type}");
             }
 
             return fileModel.Sha256Hash;
@@ -136,11 +134,11 @@ public class StorageService : BaseService
             _config.Storage.Local.Location,
             model.Location);
         var relative = Path.GetRelativePath(_config.Storage.Local.Location, location);
-        if (relative.StartsWith("./") == false)
+        if (!relative.StartsWith("./"))
         {
             _log.Error($"Path {location} with Id {model.Id} tried to escape!");
         }
-        if (location.StartsWith(_config.Storage.Local.Location) == false)
+        if (!location.StartsWith(_config.Storage.Local.Location))
         {
             throw new Exception($"Location attempted to escape\n" +
                 $"{nameof(location)}: {location}\n" +
@@ -169,7 +167,7 @@ public class StorageService : BaseService
             _log.Trace($"Uploading object to S3");
             var s3 = _services.GetRequiredService<S3Service>();
             var s3Obj = await s3.UploadObject(cs, model.Location, length);
-            model.SetSize(s3Obj.ContentLength);
+            model.Size = s3Obj.ContentLength;
         }
         else
         {
@@ -178,7 +176,7 @@ public class StorageService : BaseService
             {
                 await cs.CopyToAsync(f);
             }
-            model.SetSize(content.Length);
+            model.Size = content.Length;
         }
         model.Sha256Hash = BitConverter.ToString(hash.Hash ?? []).Replace("-", "").ToLower();
         await _storageFileRepo.InsertOrUpdate(model);

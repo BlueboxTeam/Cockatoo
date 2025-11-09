@@ -73,8 +73,8 @@ public partial class PermissionService
     }
     #region Check Permission
     public async Task<bool> CheckApplicationPermission(
-        string userId,
-        string applicationId,
+        Guid userId,
+        Guid applicationId,
         params ScopedApplicationPermissionKind[] permissions)
     {
         var kinds = permissions.Distinct().ToArray();
@@ -89,18 +89,18 @@ public partial class PermissionService
     }
     public Task<bool> CheckApplicationPermission(
         UserModel user,
-        ApplicationDetailModel application,
+        ApplicationModel application,
         params ScopedApplicationPermissionKind[] permissions)
         => CheckApplicationPermission(user.Id, application.Id, permissions);
     public Task<bool> CheckApplicationPermission(
         UserModel user,
-        string applicationId,
+        Guid applicationId,
         params ScopedApplicationPermissionKind[] permissions)
         => CheckApplicationPermission(user.Id, applicationId, permissions);
 
     public async Task<bool> CheckApplicationPermission(
-        string userId,
-        string applicationId,
+        Guid userId,
+        Guid applicationId,
         params PermissionKind[] permissions)
     {
         // Allow when user has any of those global permissions and/or they're a superuser
@@ -117,21 +117,21 @@ public partial class PermissionService
     }
     public Task<bool> CheckApplicationPermission(
         UserModel user,
-        ApplicationDetailModel application,
+        ApplicationModel application,
         params PermissionKind[] permissions)
     => CheckApplicationPermission(user.Id, application.Id, permissions);
 
     public Task<bool> CheckApplicationPermission(
         UserModel user,
-        string applicationId,
+        Guid applicationId,
         params PermissionKind[] permissions)
         => CheckApplicationPermission(user.Id, applicationId, permissions);
     #endregion
     
     #region Grant
     public async Task GrantManyApplicationForGroupAsync(
-        string groupId,
-        string applicationId,
+        Guid groupId,
+        Guid applicationId,
         params ScopedApplicationPermissionKind[] kinds)
     {
         var session = await _mongoClient.StartSessionAsync();
@@ -179,8 +179,8 @@ public partial class PermissionService
         {
             SentrySdk.CaptureException(ex, (scope) =>
             {
-                scope.SetTag($"param.{nameof(groupId)}", groupId);
-                scope.SetTag($"param.{nameof(applicationId)}", applicationId);
+                scope.SetTag($"param.{nameof(groupId)}", groupId.ToString());
+                scope.SetTag($"param.{nameof(applicationId)}", applicationId.ToString());
                 scope.SetTag($"param.{nameof(kinds)}", string.Join(", ", kinds.Select(v => v.ToString())));
             });
             await session.AbortTransactionAsync();
@@ -191,21 +191,21 @@ public partial class PermissionService
     }
     public Task GrantManyApplicationForGroupAsync(
         GroupModel group,
-        ApplicationDetailModel application,
+        ApplicationModel application,
         params ScopedApplicationPermissionKind[] kinds)
         => GrantManyApplicationForGroupAsync(group.Id, application.Id, kinds);
 
     public Task GrantManyApplicationForGroupAsync(
         GroupModel group,
-        string applicationId,
+        Guid applicationId,
         params ScopedApplicationPermissionKind[] kinds) =>
         GrantManyApplicationForGroupAsync(group.Id, applicationId, kinds);
     #endregion
     
     #region Deny
     public async Task DenyManyApplicationForGroupAsync(
-        string groupId,
-        string applicationId,
+        Guid groupId,
+        Guid applicationId,
         params ScopedApplicationPermissionKind[] kinds)
     {
         var session = await _mongoClient.StartSessionAsync();
@@ -253,8 +253,8 @@ public partial class PermissionService
         {
             SentrySdk.CaptureException(ex, (scope) =>
             {
-                scope.SetTag($"param.{nameof(groupId)}", groupId);
-                scope.SetTag($"param.{nameof(applicationId)}", applicationId);
+                scope.SetTag($"param.{nameof(groupId)}", groupId.ToString());
+                scope.SetTag($"param.{nameof(applicationId)}", applicationId.ToString());
                 scope.SetTag($"param.{nameof(kinds)}", string.Join(", ", kinds.Select(v => v.ToString())));
             });
             await session.AbortTransactionAsync();
@@ -265,21 +265,21 @@ public partial class PermissionService
     }
     public Task DenyManyApplicationForGroupAsync(
         GroupModel group,
-        ApplicationDetailModel application,
+        ApplicationModel application,
         params ScopedApplicationPermissionKind[] kinds)
         => DenyManyApplicationForGroupAsync(group.Id, application.Id, kinds);
 
     public Task DenyManyApplicationForGroupAsync(
         GroupModel group,
-        string applicationId,
+        Guid applicationId,
         params ScopedApplicationPermissionKind[] kinds) =>
         DenyManyApplicationForGroupAsync(group.Id, applicationId, kinds);
     #endregion
     
     #region Revoke
     public async Task RevokeManyApplicationForGroupAsync(
-        string groupId,
-        string applicationId,
+        Guid groupId,
+        Guid applicationId,
         params ScopedApplicationPermissionKind[] kinds)
     {
         var session = await _mongoClient.StartSessionAsync();
@@ -303,8 +303,8 @@ public partial class PermissionService
         {
             SentrySdk.CaptureException(ex, (scope) =>
             {
-                scope.SetTag($"param.{nameof(groupId)}", groupId);
-                scope.SetTag($"param.{nameof(applicationId)}", applicationId);
+                scope.SetTag($"param.{nameof(groupId)}", groupId.ToString());
+                scope.SetTag($"param.{nameof(applicationId)}", applicationId.ToString());
                 scope.SetTag($"param.{nameof(kinds)}", string.Join(", ", kinds.Select(v => v.ToString())));
             });
             await session.AbortTransactionAsync();
@@ -316,13 +316,13 @@ public partial class PermissionService
 
     public Task RevokeManyApplicationForGroupAsync(
         GroupModel group,
-        ApplicationDetailModel application,
+        ApplicationModel application,
         params ScopedApplicationPermissionKind[] kinds)
         => RevokeManyApplicationForGroupAsync(group.Id, application.Id, kinds);
     
     public Task RevokeManyApplicationForGroupAsync(
         GroupModel group,
-        string applicationId,
+        Guid applicationId,
         params ScopedApplicationPermissionKind[] kinds)
         => RevokeManyApplicationForGroupAsync(group.Id, applicationId, kinds);
     #endregion

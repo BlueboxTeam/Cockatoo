@@ -8,11 +8,14 @@ public class BullseyeV2CacheModel
 
     public BullseyeV2CacheModel()
     {
+        Id = Guid.NewGuid();
         ApplicationId = Guid.Empty;
         IsLive = false;
         Content = new();
         CreatedAt = DateTimeOffset.UtcNow;
     }
+
+    public Guid Id { get; set; }
 
     public Guid ApplicationId { get; set; }
 

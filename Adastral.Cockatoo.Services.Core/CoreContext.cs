@@ -2,8 +2,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using MongoDB.Driver;
-using MongoDB.Driver.Linq;
 using NLog;
 using Adastral.Cockatoo.Common;
 using FluentScheduler;
@@ -11,7 +9,6 @@ using System.Data;
 using System.Reflection;
 using kate.shared.Helpers;
 using Microsoft.Extensions.Caching.Distributed;
-using Sentry;
 
 namespace Adastral.Cockatoo.Services;
 
@@ -22,7 +19,7 @@ public class CoreContext : ICoreContext
     public static JsonSerializerOptions SerializerOptions => BaseService.SerializerOptions;
     /// <inheritdoc />
     public string Id { get; private set; }
-    public CockatooConfig Config { get; private set; }
+    public AppConfig Config { get; private set; }
     public CoreContext()
     {
         if (Instance != null)
@@ -33,47 +30,38 @@ public class CoreContext : ICoreContext
         StartTimestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         Instance = this;
         JobManager.Initialize();
-        if (FeatureFlags.SentryEnable)
+        if (!string.IsNullOrEmpty(FeatureFlags.SentryDSN))
         {
-            if (string.IsNullOrEmpty(FeatureFlags.SentryDSN))
+            SentrySdk.Init(options =>
             {
-                Console.Error.WriteLine($"[CoreContext] Not initializing Sentry since {nameof(FeatureFlags)}.{nameof(FeatureFlags.SentryDSN)} is null/empty");
-            }
-            else
-            {
-                SentrySdk.Init(options =>
-                {
-                    options.Dsn = FeatureFlags.SentryDSN;
-                    #if DEBUG
-                    options.Debug = true;
-                    #else
-                    options.Debug = false;
-                    #endif
-                    options.AutoSessionTracking = true;
-                    // A fixed sample rate of 1.0 - 100% of all transactions are getting sent
-                    options.TracesSampleRate = 1.0f;
-                    // A sample rate for profiling - this is relative to TracesSampleRate
-                    options.ProfilesSampleRate = 1.0f;
-                });
-            }
+                options.Dsn = FeatureFlags.SentryDSN;
+#if DEBUG
+                options.Debug = true;
+#else
+                options.Debug = false;
+#endif
+                options.AutoSessionTracking = true;
+                // A fixed sample rate of 1.0 - 100% of all transactions are getting sent
+                options.TracesSampleRate = 1.0f;
+                // A sample rate for profiling - this is relative to TracesSampleRate
+                options.ProfilesSampleRate = 1.0f;
+            });
         }
-        Config = new(true);
-        Config.Read();
         JobManager.AddJob(() =>
         {
-            var logger = LogManager.GetLogger("Job_ConfigRead");
+            var logger = LogManager.GetLogger("Cockatoo.Job.ConfigRead");
             var slug = $"{GetType().Name}-Job_ConfigRead";
             logger.Debug($"{slug}|Running..");
             var checkInId = SentrySdk.CaptureCheckIn(slug, CheckInStatus.InProgress);
             try
             {
-                Config.Read();
+                AppConfig.Instance.ReadFromFile(FeatureFlags.ConfigLocation);
                 SentrySdk.CaptureCheckIn(slug, CheckInStatus.Ok, checkInId);
                 logger.Debug($"{slug}|Job completed! ({checkInId})");
             }
             catch (Exception ex)
             {
-                logger.Error($"{slug}|Failed to run scheduled task CockatooConfig.Read\n{ex}");
+                logger.Error(ex, $"{slug}|Failed to run scheduled task Cockatoo.Job.ConfigRead");
                 SentrySdk.CaptureException(ex);
                 SentrySdk.CaptureCheckIn(slug, CheckInStatus.Error, checkInId);
             }
@@ -92,7 +80,6 @@ public class CoreContext : ICoreContext
         var objectSerializer = new ObjectSerializer(type => ObjectSerializer.DefaultAllowedTypes(type) || (type.FullName?.StartsWith("Adastral.Cockatoo") ?? false));
         BsonSerializer.RegisterSerializer(objectSerializer);
 
-        InitMongoClient();
         InitServices(beforeServiceBuild, customServiceCollection, customServiceCollection == null);
 
         if (AlternativeMain != null)
@@ -180,35 +167,7 @@ public class CoreContext : ICoreContext
     /// UTC of <see cref="DateTimeOffset.ToUnixTimeSeconds()"/>
     /// </summary>
     public long StartTimestamp { get; private set; } = 0;
-    public MongoClient? MongoDB { get; private set; }
-
-    /// <summary>
-    /// Initialize MongoDB Client (<see cref="MongoDB"/>)
-    /// </summary>
-    private void InitMongoClient()
-    {
-        try
-        {
-            _log.Debug("Connecting to MongoDB");
-            var connectionSettings = MongoClientSettings.FromConnectionString(Config.MongoDB.ConnectionString);
-            connectionSettings.AllowInsecureTls = true;
-            connectionSettings.MaxConnectionPoolSize = 500;
-            connectionSettings.WaitQueueSize = 2000;
-            connectionSettings.MaxConnectionPoolSize = 8192;
-            connectionSettings.LinqProvider = LinqProvider.V3;
-            MongoDB = new MongoClient(connectionSettings);
-            MongoDB.StartSession();
-        }
-        catch (Exception ex)
-        {
-            _log.Error($"Failed to connect to MongoDB Server\n{ex}");
-            OnQuit(1);
-        }
-    }
-    public IMongoDatabase? GetDatabase()
-    {
-        return MongoDB?.GetDatabase(Config.MongoDB.DatabaseName);
-    }
+    
     #region Services
     private void InitServices(Func<IServiceCollection, Task> beforeServiceBuild, IServiceCollection? customServiceCollection = null, bool buildServiceCollection = true)
     {
@@ -223,7 +182,6 @@ public class CoreContext : ICoreContext
     /// <exception cref="ArgumentException">Thrown when <paramref name="buildServiceCollection"/> is <see langword="false"/> and <see cref="BuildServiceCollectionAction"/> is <see langword="null"/></exception>
     private void InjectServices(IServiceCollection services, Func<IServiceCollection, Task> beforeBuild, bool buildServiceCollection)
     {
-        var mongoDb = GetDatabase();
         if (mongoDb == null)
         {
             _log.Error($"FATAL ERROR!!! CoreContext.GetDatabase() returned null!");

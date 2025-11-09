@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json.Serialization;
 
 namespace Adastral.Cockatoo.Services.WebApi.Models.Response;
@@ -20,12 +19,12 @@ public class RevisionParentAppMismatchResponse
         /// </summary>
         [JsonPropertyName("revision")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? RevisionId { get; set; }
+        public Guid? RevisionId { get; set; }
         /// <summary>
         /// <see cref="ApplicationDetailModel.Id"/>
         /// </summary>
         [JsonPropertyName("app")]
-        public string AppId { get; set; }
+        public Guid AppId { get; set; }
         /// <summary>
         /// Name of the property that the Revisio Id was defined on.
         /// </summary>

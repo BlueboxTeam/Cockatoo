@@ -17,6 +17,7 @@ public class AutoUpdaterDotNetRevisionModel
         IsEnabled = false;
         Mandatory = false;
         MandatoryKind = AutoUpdaterDotNetMandatoryKind.Normal;
+        CreatedAt = DateTimeOffset.UtcNow;
     }
 
     public Guid Id { get; set; }
@@ -90,6 +91,16 @@ public class AutoUpdaterDotNetRevisionModel
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? MandatoryMinimumVersion { get; set; }
+
+    /// <summary>
+    /// Time when this revision was created (UTC)
+    /// </summary>
+    public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// Time when this revision was updated (UTC)
+    /// </summary>
+    public DateTimeOffset? UpdatedAt { get; set; }
 }
 
 public enum AutoUpdaterDotNetMandatoryKind

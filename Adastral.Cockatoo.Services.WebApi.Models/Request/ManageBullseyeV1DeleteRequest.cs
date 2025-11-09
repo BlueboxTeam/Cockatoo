@@ -18,7 +18,8 @@ public class ManageBullseyeV1DeleteRequest
     /// </summary>
     [Required]
     [JsonPropertyName("id")]
-    public string AppId { get; set; }
+    public Guid AppId { get; set; }
+
     /// <summary>
     /// When <see langword="true"/>, the files used by this app will be deleted.
     /// </summary>

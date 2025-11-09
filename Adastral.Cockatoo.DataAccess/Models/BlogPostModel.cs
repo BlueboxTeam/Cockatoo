@@ -40,8 +40,6 @@ public class BlogPostModel
     [Description("Timestamp when this blog post was created.")]
     public DateTimeOffset CreatedAt { get; set; }
 
-    public List<Guid> AuthorIds { get; set; } = [];
-
     /// <summary>
     /// <see cref="ApplicationDetailModel.Id"/> that is associated with this blog post.
     /// </summary>
@@ -56,9 +54,21 @@ public class BlogPostModel
     [DefaultValue(null)]
     public Guid? BullseyeRevisionId { get; set; }
 
+
+    #region IsDeleted
+    [DefaultValue(false)]
+    public bool IsDeleted { get; set; } = false;
+    [DefaultValue(null)]
+    public DateTimeOffset? DeletedAt { get; set; }
+    [DefaultValue(null)]
+    public Guid? DeletedByUserId { get; set; }
+    #endregion
+
+    #region Property Accessors
     /// <summary>
     /// List of <see cref="UserModel.Id"/> for who created this blog post.
     /// </summary>
     [Description("List of Users that will be displayed as authors.")]
     public List<BlogPostAuthorModel> Authors { get; set; } = [];
+    #endregion
 }

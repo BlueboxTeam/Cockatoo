@@ -13,7 +13,7 @@ namespace Adastral.Cockatoo.Services.WebApi;
 [CockatooDependency]
 public class AdminGroupWebService : BaseService
 {
-    private readonly ApplicationDetailRepository _applicationRepo;
+    private readonly ApplicationRepository _applicationRepo;
     private readonly GroupRepository _groupRepo;
     private readonly GroupPermissionGlobalRepository _groupPermGlobalRepo;
     private readonly GroupPermissionApplicationRepository _groupPermAppRepo;
@@ -27,7 +27,7 @@ public class AdminGroupWebService : BaseService
     public AdminGroupWebService(IServiceProvider services)
         : base(services)
     {
-        _applicationRepo = services.GetRequiredService<ApplicationDetailRepository>();
+        _applicationRepo = services.GetRequiredService<ApplicationRepository>();
         _groupRepo = services.GetRequiredService<GroupRepository>();
         _groupPermGlobalRepo = services.GetRequiredService<GroupPermissionGlobalRepository>();
         _groupPermAppRepo = services.GetRequiredService<GroupPermissionApplicationRepository>();

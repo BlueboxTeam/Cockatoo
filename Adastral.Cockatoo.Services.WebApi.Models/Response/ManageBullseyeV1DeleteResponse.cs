@@ -1,5 +1,4 @@
-﻿using Adastral.Cockatoo.DataAccess;
-using Adastral.Cockatoo.DataAccess.Models;
+﻿using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.Services.WebApi.Models.Request;
 
 namespace Adastral.Cockatoo.Services.WebApi.Models.Response;
@@ -14,7 +13,7 @@ public class ManageBullseyeV1DeleteResponse
     /// <summary>
     /// Instance of <see cref="BullseyeAppModel"/> in the database.
     /// </summary>
-    public BullseyeAppModel? BullseyeAppModel { get; set; }
+    public ApplicationBullseyeModel? BullseyeAppModel { get; set; }
     /// <summary>
     /// Exception that was thrown when trying to fetch and delete <see cref="BullseyeAppModel"/> (<see langword="null"/> when there is none)
     /// </summary>
@@ -22,7 +21,7 @@ public class ManageBullseyeV1DeleteResponse
     /// <summary>
     /// Associated instance of <see cref="ApplicationDetailModel"/> for the provided Bullseye App.
     /// </summary>
-    public ApplicationDetailModel? ApplicationDetailModel { get; set; }
+    public ApplicationModel? ApplicationDetailModel { get; set; }
     /// <summary>
     /// Exception that was thrown when trying to fetch <see cref="ApplicationDetailModel"/> (<see langword="null"/> when there is none)
     /// </summary>
@@ -34,19 +33,19 @@ public class ManageBullseyeV1DeleteResponse
     /// <summary>
     /// List of all the instances of <see cref="BullseyeAppRevisionModel"/> that were deleted from the database.
     /// </summary>
-    public List<BullseyeAppRevisionModel> DeletedRevisions { get; set; } = [];
+    public List<BullseyeRevisionModel> DeletedRevisions { get; set; } = [];
     /// <summary>
     /// Dictionary of exceptions that were caught when finding revisions to delete.
     /// <para><b>Key:</b> <see cref="BullseyeAppRevisionModel.Id"/></para>
     /// <para><b>Value:</b> <see cref="Exception"/> turned into <see cref="ExceptionWebResponse"/></para>
     /// </summary>
-    public Dictionary<string, ExceptionWebResponse> DeleteRevisionExceptions { get; set; } = new();
+    public Dictionary<Guid, ExceptionWebResponse> DeleteRevisionExceptions { get; set; } = new();
     /// <summary>
     /// <para><b>Dictionary of excetpions that were caught when deleting files.</b></para>
     /// <para><b>Key:</b> <see cref="StorageFileModel.Id"/></para>
     /// <para><b>Value:</b> <see cref="Exception"/> turned into <see cref="ExceptionWebResponse"/></para>
     /// </summary>
-    public Dictionary<string, ExceptionWebResponse> DeleteFileExceptions { get; set; } = new();
+    public Dictionary<Guid, ExceptionWebResponse> DeleteFileExceptions { get; set; } = new();
 
 
     #region Bullseye Cache Models

@@ -19,13 +19,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Adastral.Cockatoo.Services.WebApi\Adastral.Cockatoo.Services.WebApi.csproj" />
+    <ProjectReference Include="..\Adastral.Cockatoo.Shared.AspNet\Adastral.Cockatoo.Shared.AspNet.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="NLog.Extensions.Logging" Version="5.3.11" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.5" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
-    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.8" />
+    <PackageReference Include="NLog.Extensions.Logging" Version="6.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.10" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.10" />
   </ItemGroup>
 
 </Project>

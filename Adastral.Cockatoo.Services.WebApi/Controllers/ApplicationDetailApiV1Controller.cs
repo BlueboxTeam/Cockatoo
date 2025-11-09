@@ -15,7 +15,7 @@ namespace Adastral.Cockatoo.Services.WebApi.Controllers;
 [TrackRequest]
 public class ApplicationDetailApiV1Controller : Controller
 {
-    private readonly ApplicationDetailRepository _appDetailRepo;
+    private readonly ApplicationRepository _appDetailRepo;
     private readonly PermissionWebService _permissionWebService;
     private readonly ApplicationDetailService _appDetailService;
     private readonly AUDNRevisionRepository _audnRevisionRepo;
@@ -27,7 +27,7 @@ public class ApplicationDetailApiV1Controller : Controller
     public ApplicationDetailApiV1Controller(IServiceProvider services)
         : base()
     {
-        _appDetailRepo = services!.GetRequiredService<ApplicationDetailRepository>();
+        _appDetailRepo = services!.GetRequiredService<ApplicationRepository>();
         _permissionWebService = services.GetRequiredService<PermissionWebService>();
         _appDetailService = services.GetRequiredService<ApplicationDetailService>();
         _audnRevisionRepo = services.GetRequiredService<AUDNRevisionRepository>();
@@ -41,7 +41,7 @@ public class ApplicationDetailApiV1Controller : Controller
     /// Fetch an array of all available application details.
     /// </summary>
     [HttpGet("Available")]
-    [ProducesResponseType(typeof(List<ApplicationDetailModel>), 200, "application/json")]
+    [ProducesResponseType(typeof(List<ApplicationModel>), 200, "application/json")]
     public async Task<ActionResult> GetAvailableJson()
     {
         bool includePrivate = await _permissionWebService.CurrentHasAny(HttpContext, PermissionKind.ApplicationDetailViewAll);
@@ -53,10 +53,10 @@ public class ApplicationDetailApiV1Controller : Controller
     /// Fetch info about a specific application by its ID
     /// </summary>
     [HttpGet("Id/{id}")]
-    [ProducesResponseType(typeof(ApplicationDetailModel), 200, "application/json")]
+    [ProducesResponseType(typeof(ApplicationModel), 200, "application/json")]
     [ProducesResponseType(typeof(NotAuthorizedResponse), 403, "application/json")]
     [ProducesResponseType(typeof(NotFoundResponse), 404, "application/json")]
-    public async Task<ActionResult> GetById(string id)
+    public async Task<ActionResult> GetById(Guid id)
     {
         var data = await _appDetailRepo.GetById(id);
         if (data == null)
@@ -64,7 +64,7 @@ public class ApplicationDetailApiV1Controller : Controller
             Response.StatusCode = 404;
             return Json(new NotFoundResponse()
             {
-                Message = $"Could not find {nameof(ApplicationDetailModel)} with Id {id}",
+                Message = $"Could not find {nameof(ApplicationModel)} with Id {id}",
                 PropertyName = nameof(id)
             }, BaseService.SerializerOptions);
         }
@@ -102,7 +102,7 @@ public class ApplicationDetailApiV1Controller : Controller
     [ProducesResponseType(200, Type = typeof(FileStreamResult))]
     [ProducesResponseType(typeof(NotAuthorizedResponse), 403, "application/json")]
     [ProducesResponseType(typeof(NotFoundResponse), 404, "application/json")]
-    public async Task<ActionResult> GetAUDNFile(string id, [FromQuery] bool includeDisabled = false)
+    public async Task<ActionResult> GetAUDNFile(Guid id, [FromQuery] bool includeDisabled = false)
     {
         var app = await _appDetailRepo.GetById(id);
         if (app == null)
@@ -110,17 +110,17 @@ public class ApplicationDetailApiV1Controller : Controller
             Response.StatusCode = 404;
             return Json(new NotFoundResponse()
             {
-                Message = $"Could not find {nameof(ApplicationDetailModel)} with Id {id}",
+                Message = $"Could not find {nameof(ApplicationModel)} with Id {id}",
                 PropertyName = nameof(id)
             }, BaseService.SerializerOptions);
         }
 
-        if (app.Type != ApplicationDetailType.AutoUpdaterDotNet)
+        if (app.Type != ApplicationType.AutoUpdaterDotNet)
         {
             Response.StatusCode = 404;
             return Json(new NotFoundResponse()
             {
-                Message = $"Could not find {nameof(ApplicationDetailModel)} with Id {id}",
+                Message = $"Could not find {nameof(ApplicationModel)} with Id {id}",
                 PropertyName = nameof(id)
             }, BaseService.SerializerOptions);
         }
@@ -161,7 +161,7 @@ public class ApplicationDetailApiV1Controller : Controller
             Response.StatusCode = 404;
             return Json(new NotFoundResponse()
             {
-                Message = $"Could not find latest AutoUpdaterDotNet revision for {nameof(ApplicationDetailModel)} with Id {id}",
+                Message = $"Could not find latest AutoUpdaterDotNet revision for {nameof(ApplicationModel)} with Id {id}",
                 PropertyName = nameof(id)
             }, BaseService.SerializerOptions);
         }
@@ -171,12 +171,12 @@ public class ApplicationDetailApiV1Controller : Controller
             Response.StatusCode = 404;
             return Json(new NotFoundResponse()
             {
-                Message = $"Could not find file with Id {revision.StorageFileId} for {nameof(AUDNRevisionModel)} with Id {revision.Id}",
+                Message = $"Could not find file with Id {revision.StorageFileId} for {nameof(AutoUpdaterDotNetRevisionModel)} with Id {revision.Id}",
                 PropertyName = nameof(revision.StorageFileId),
                 PropertyParentType = CockatooHelper.FormatTypeName(revision.GetType())
             }, BaseService.SerializerOptions);
         }
-        Response.Headers.TryAdd("X-AUDNRevisionModel-Id", new Microsoft.Extensions.Primitives.StringValues(revision.Id));
+        Response.Headers.TryAdd("X-AUDNRevisionModel-Id", new Microsoft.Extensions.Primitives.StringValues(revision.Id.ToString()));
         var content = await _storageService.GetStream(fileModel);
         Response.StatusCode = 200;
         return new FileStreamResult(content, fileModel.ContentType)
@@ -189,7 +189,7 @@ public class ApplicationDetailApiV1Controller : Controller
     [ProducesResponseType(typeof(UpdateInfoEventArgs), 200, "application/xml")]
     [ProducesResponseType(typeof(NotAuthorizedResponse), 403, "application/json")]
     [ProducesResponseType(typeof(NotFoundResponse), 404, "application/json")]
-    public async Task<ActionResult> GetAutoUpdateDotNet(string id, [FromQuery] bool includeDisabled = false, [FromQuery] bool force = false)
+    public async Task<ActionResult> GetAutoUpdateDotNet(Guid id, [FromQuery] bool includeDisabled = false, [FromQuery] bool force = false)
     {
         var app = await _appDetailRepo.GetById(id);
         if (app == null)
@@ -197,17 +197,17 @@ public class ApplicationDetailApiV1Controller : Controller
             Response.StatusCode = 404;
             return Json(new NotFoundResponse()
             {
-                Message = $"Could not find {nameof(ApplicationDetailModel)} with Id {id}",
+                Message = $"Could not find {nameof(ApplicationModel)} with Id {id}",
                 PropertyName = nameof(id)
             }, BaseService.SerializerOptions);
         }
 
-        if (app.Type != ApplicationDetailType.AutoUpdaterDotNet)
+        if (app.Type != ApplicationType.AutoUpdaterDotNet)
         {
             Response.StatusCode = 404;
             return Json(new NotFoundResponse()
             {
-                Message = $"Could not find {nameof(ApplicationDetailModel)} with Id {id}",
+                Message = $"Could not find {nameof(ApplicationModel)} with Id {id}",
                 PropertyName = nameof(id)
             }, BaseService.SerializerOptions);
         }

@@ -114,6 +114,9 @@ public class AppConfig
     [XmlElement("Proxy")]
     public ProxyConfigElement? Proxy { get; set; }
 
+    [XmlElement("Sentry")]
+    public SentryConfigElement? Sentry { get; set; }
+
     [XmlElement("PublicUrl")]
     [Description("Base Url for public access. Must not have a trailing slash (like `https://cockatoo.example.com`)")]
     [DefaultValue("http://localhost:6280")]

@@ -17,21 +17,20 @@ namespace Adastral.Cockatoo.Services.WebApi.Controllers;
 public class ManageApplicationApiV1Controller(IServiceProvider services) : Controller()
 {
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
-    private readonly ApplicationDetailRepository _appDetailRepo = services.GetRequiredService<ApplicationDetailRepository>();
+    private readonly ApplicationRepository _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
     private readonly PermissionWebService _permissionWebService = services.GetRequiredService<PermissionWebService>();
-    private readonly ApplicationDetailService _appDetailService = services.GetRequiredService<ApplicationDetailService>();
     private readonly StorageService _storageService = services.GetRequiredService<StorageService>();
     private readonly StorageFileRepository _storageFileRepo = services.GetRequiredService<StorageFileRepository>();
     private readonly AUDNRevisionRepository _audnRevisionRepo = services.GetRequiredService<AUDNRevisionRepository>();
     
     [HttpPost("{appId}/AutoUpdaterDotNet/SubmitRevision")]
-    [ProducesResponseType(typeof(AUDNRevisionModel), 200, "application/json")]
+    [ProducesResponseType(typeof(AutoUpdaterDotNetRevisionModel), 200, "application/json")]
     [ProducesResponseType(typeof(ExceptionWebResponse), 401, "application/json")]
     [ProducesResponseType(typeof(NotAuthorizedResponse), 403, "application/json")]
     [ProducesResponseType(typeof(NotFoundResponse), 404, "application/json")]
     [ScopedPermissionRequired("appId", ScopedPermissionKeyKind.ApplicationId, PermissionKind.ApplicationDetailAUDNSubmitRevision)]
     public async Task<ActionResult> SubmitAUDNRevision(
-        string appId,
+        Guid appId,
         [Required] [FromQuery] string version,
         [Required] [FromQuery] string filename)
     {
@@ -41,13 +40,13 @@ public class ManageApplicationApiV1Controller(IServiceProvider services) : Contr
             Response.StatusCode = 404;
             return Json(new NotFoundResponse()
             {
-                Message = $"Could not find {nameof(ApplicationDetailModel)} with Id {appId}",
+                Message = $"Could not find {nameof(ApplicationModel)} with Id {appId}",
                 PropertyName = nameof(appId)
             }, BaseService.SerializerOptions);
         }
         
         bool includePrivate = await _permissionWebService.CurrentHasAny(HttpContext, PermissionKind.ApplicationDetailViewAll);
-        if (app!.IsPrivate && includePrivate == false)
+        if (app!.IsPrivate && !includePrivate)
         {
             Response.StatusCode = 403;
             return Json(new NotAuthorizedResponse()
@@ -56,10 +55,10 @@ public class ManageApplicationApiV1Controller(IServiceProvider services) : Contr
             }, BaseService.SerializerOptions);
         }
 
-        if (app.Type != ApplicationDetailType.AutoUpdaterDotNet)
+        if (app.Type != ApplicationType.AutoUpdaterDotNet)
         {
             Response.StatusCode = 401;
-            return Json(new ExceptionWebResponse(new ArgumentException($"Application {app.DisplayName} ({app.Id}) has invalid type {app.Type}, must be {ApplicationDetailType.AutoUpdaterDotNet}.")), BaseService.SerializerOptions);
+            return Json(new ExceptionWebResponse(new ArgumentException($"Application {app.DisplayName} ({app.Id}) has invalid type {app.Type}, must be {ApplicationType.AutoUpdaterDotNet}.")), BaseService.SerializerOptions);
         }
         if (string.IsNullOrEmpty(version))
         {
@@ -87,13 +86,13 @@ public class ManageApplicationApiV1Controller(IServiceProvider services) : Contr
 
         try
         {
-            var model = new AUDNRevisionModel()
+            var model = new AutoUpdaterDotNetRevisionModel()
             {
                 ApplicationId = app.Id,
                 Version = version,
                 StorageFileId = file.Id,
             };
-            await _audnRevisionRepo.InsertOrUpdate(model);
+            model = await _audnRevisionRepo.InsertOrUpdate(model);
 
             Response.StatusCode = 200;
             return Json(model, BaseService.SerializerOptions);
@@ -106,8 +105,8 @@ public class ManageApplicationApiV1Controller(IServiceProvider services) : Contr
             }
             catch (Exception ex)
             {
-                _log.Error($"Failed to delete file {file.Id} after failed to insert new {nameof(AUDNRevisionModel)}\n{ex}");
-                SentrySdk.CaptureException(new AggregateException($"Failed to delete file {file.Id} after failed to insert new {nameof(AUDNRevisionModel)}", ex));
+                _log.Error(ex, $"Failed to delete file {file.Id} after failed to insert new {nameof(AutoUpdaterDotNetRevisionModel)}");
+                SentrySdk.CaptureException(new AggregateException($"Failed to delete file {file.Id} after failed to insert new {nameof(AutoUpdaterDotNetRevisionModel)}", ex));
             }
             throw;
         }

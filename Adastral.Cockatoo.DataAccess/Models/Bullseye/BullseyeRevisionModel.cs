@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 
 namespace Adastral.Cockatoo.DataAccess.Models;
 
@@ -31,6 +32,18 @@ public class BullseyeRevisionModel
     public Guid? PreviousRevisionId { get; set; }
 
     /// <summary>
+    /// <para><b>Version number</b></para>
+    /// Unique within <see cref="ApplicationId"/>
+    /// </summary>
+    public int Version { get; set; }
+
+    /// <summary>
+    /// Tag for this revision. Used for displaying in-app. This is unique db-wide
+    /// </summary>
+    [MaxLength(100)]
+    public string? Tag { get; set; } // TODO fluent config for unique index
+
+    /// <summary>
     /// Id for the Storage File that contains the full Archive of this revision.
     /// </summary>
     /// <remarks>
@@ -39,10 +52,14 @@ public class BullseyeRevisionModel
     [DefaultValue(null)]
     public Guid? ArchiveStorageFileId { get; set; }
 
+
     /// <summary>
     /// Decompressed size of the file at in <see cref="ArchiveStorageFileId"/>
     /// </summary>
     public long Size { get; set; }
+
+    [DefaultValue(null)]
+    public Guid? PeerToPeerStorageFileId { get; set; }
 
     /// <summary>
     /// Id for the Storage File that contains the signature file.

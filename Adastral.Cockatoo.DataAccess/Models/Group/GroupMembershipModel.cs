@@ -28,11 +28,17 @@ public class GroupMembershipModel
     /// <summary>
     /// When the user was made a member of the group.
     /// </summary>
+    /// <remarks>
+    /// Not included when updating in <see cref="Repositories.GroupUserAssociationRepository.InsertOrUpdate(GroupMembershipModel, Repositories.GroupMembershipInclude)"/>
+    /// </remarks>
     public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>
     /// Who made this user apart of this group?
     /// </summary>
+    /// <remarks>
+    /// Not included when updating in <see cref="Repositories.GroupUserAssociationRepository.InsertOrUpdate(GroupMembershipModel, Repositories.GroupMembershipInclude)"/>
+    /// </remarks>
     public Guid? CreatedByUserId { get; set; }
 
 

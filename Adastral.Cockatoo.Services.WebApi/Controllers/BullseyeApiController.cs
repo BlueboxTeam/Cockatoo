@@ -13,13 +13,12 @@ namespace Adastral.Cockatoo.Services.WebApi.Controllers;
 [TrackRequest]
 public class BullseyeApiController : Controller
 {
-    private readonly BullseyeAppRepository _bullseyeAppRepo;
-    private readonly ApplicationDetailRepository _appDetailRepo;
+    private readonly ApplicationRepository _appDetailRepo;
     private readonly BlogPostRepository _blogPostRepo;
     private readonly BlogPostTagRepository _blogPostTagRepo;
     private readonly BlogTagRepository _blogTagRepo;
     private readonly BullseyeCacheService _bullseyeCacheService;
-    private readonly BullseyeAppRevisionRepository _bullseyeRevisionRepo;
+    private readonly BullseyeRevisionRepository _bullseyeRevisionRepo;
     private readonly UserRepository _userRepo;
     private readonly PermissionWebService _permissionWebService;
     private readonly AuthWebService _authWebService;
@@ -28,12 +27,12 @@ public class BullseyeApiController : Controller
         : base()
     {
         _bullseyeAppRepo = services.GetRequiredService<BullseyeAppRepository>();
-        _appDetailRepo = services.GetRequiredService<ApplicationDetailRepository>();
+        _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
         _blogPostRepo = services.GetRequiredService<BlogPostRepository>();
         _blogPostTagRepo = services.GetRequiredService<BlogPostTagRepository>();
         _blogTagRepo = services.GetRequiredService<BlogTagRepository>();
         _bullseyeCacheService = services.GetRequiredService<BullseyeCacheService>();
-        _bullseyeRevisionRepo = services.GetRequiredService<BullseyeAppRevisionRepository>();
+        _bullseyeRevisionRepo = services.GetRequiredService<BullseyeRevisionRepository>();
         _userRepo = services.GetRequiredService<UserRepository>();
         _permissionWebService = services.GetRequiredService<PermissionWebService>();
         _authWebService = services.GetRequiredService<AuthWebService>();
@@ -54,7 +53,7 @@ public class BullseyeApiController : Controller
     [ProducesResponseType(typeof(NotFoundWebResponse), 404, "application/json")]
     [ProducesResponseType(typeof(ExceptionWebResponse), 500, "application/json")]
     [HttpGet("~/api/v1/Bullseye/{appId}/Revision/{revisionId}/BlogPosts")]
-    public async Task<ActionResult> GetBlogPostsForRevision(string appId, string revisionId)
+    public async Task<ActionResult> GetBlogPostsForRevision(Guid appId, Guid revisionId)
     {
         try
         {
@@ -63,13 +62,13 @@ public class BullseyeApiController : Controller
             {
                 Response.StatusCode = 404;
                 return Json(new NotFoundWebResponse(
-                    typeof(BullseyeAppModel),
-                    nameof(BullseyeAppModel.Id),
+                    typeof(ApplicationBullseyeModel),
+                    nameof(ApplicationBullseyeModel.ApplicationId),
                     appId,
                     $"Could not find model in {nameof(BullseyeAppRepository)} with Id {nameof(appId)}"), BaseService.SerializerOptions);
             }
             
-            bool includePrivate = true;
+            var includePrivate = true;
             var user = await _authWebService.GetCurrentUser(HttpContext);
             if (appDetailModel!.IsPrivate)
             {
@@ -100,12 +99,12 @@ public class BullseyeApiController : Controller
             }
             
             // pretend 404 when not kachemak
-            if (appDetailModel.Type != ApplicationDetailType.Kachemak)
+            if (appDetailModel.Type != ApplicationType.Kachemak)
             {
                 Response.StatusCode = 404;
                 return Json(new NotFoundWebResponse(
-                    typeof(BullseyeAppModel),
-                    nameof(BullseyeAppModel.Id),
+                    typeof(ApplicationBullseyeModel),
+                    nameof(ApplicationBullseyeModel.ApplicationId),
                     appId,
                     $"Could not find model in {nameof(BullseyeAppRepository)} with Id {nameof(appId)}"), BaseService.SerializerOptions);
             }
@@ -115,38 +114,37 @@ public class BullseyeApiController : Controller
             {
                 Response.StatusCode = 404;
                 return Json(new NotFoundWebResponse(
-                    typeof(BullseyeAppRevisionModel),
-                    nameof(BullseyeAppRevisionModel.Id),
+                    typeof(BullseyeRevisionModel),
+                    nameof(BullseyeRevisionModel.Id),
                     revisionId,
-                    $"Could not find model in {nameof(BullseyeAppRevisionRepository)} with Id {nameof(revisionId)}"), BaseService.SerializerOptions);
+                    $"Could not find model in {nameof(BullseyeRevisionRepository)} with Id {nameof(revisionId)}"), BaseService.SerializerOptions);
             }
-            if (bullseyeRevisionModel.IsLive == false)
+            if (!bullseyeRevisionModel.IsLive
+                && !await _permissionWebService.CurrentHasAny(HttpContext, PermissionKind.BullseyeViewPrivateModels) == false)
             {
-                if (await _permissionWebService.CurrentHasAny(HttpContext, PermissionKind.BullseyeViewPrivateModels) == false)
-                {
-                    Response.StatusCode = 404;
-                    return Json(new NotFoundWebResponse(
-                        typeof(BullseyeAppRevisionModel),
-                        nameof(BullseyeAppRevisionModel.Id),
-                        revisionId,
-                        $"Could not find model in {nameof(BullseyeAppRevisionRepository)} with Id {nameof(revisionId)}"), BaseService.SerializerOptions);
-                }
+                Response.StatusCode = 404;
+                return Json(new NotFoundWebResponse(
+                    typeof(BullseyeRevisionModel),
+                    nameof(BullseyeRevisionModel.Id),
+                    revisionId,
+                    $"Could not find model in {nameof(BullseyeRevisionRepository)} with Id {nameof(revisionId)}"), BaseService.SerializerOptions);
             }
 
             bool viewAllBlogPosts = await _permissionWebService.CurrentHasAny(HttpContext, PermissionKind.ApplicationBlogPostViewAll);
 
             var posts = await _blogPostRepo.GetManyForRevision(appId, !viewAllBlogPosts);
             var result = new List<BlogPostV1Response>();
-            var userDict = new Dictionary<string, UserModel>();
-            var tagDict = new Dictionary<string, BlogTagModel>();
+            var userDict = new Dictionary<Guid, UserModel>(); // TODO UserModel needs data contract for API response!!!
+            var tagDict = new Dictionary<Guid, BlogTagModel>();
             foreach (var item in posts)
             {
                 var x = new BlogPostV1Response();
                 x.FromModel(item);
-                foreach (var uid in item.AuthorIds)
+                foreach (var uid in item.Authors.Select(e => e.UserId))
                 {
-                    if (userDict.ContainsKey(uid) == false)
+                    if (!userDict.ContainsKey(uid))
                     {
+                        // TODO UserModel needs data contract for API response!!!
                         var usrModel = await _userRepo.GetById(uid);
                         if (usrModel != null)
                             userDict[usrModel.Id] = usrModel;
@@ -162,14 +160,14 @@ public class BullseyeApiController : Controller
                 var postTags = await _blogPostTagRepo.GetManyForPost(item.Id);
                 foreach (var tag in postTags)
                 {
-                    if (tagDict.ContainsKey(tag.TagId) == false)
+                    if (!tagDict.ContainsKey(tag.BlogTagId))
                     {
-                        var tagModel = await _blogTagRepo.GetById(tag.TagId);
+                        var tagModel = await _blogTagRepo.GetById(tag.BlogTagId);
                         if (tagModel != null)
-                            tagDict[tag.TagId] = tagModel;
+                            tagDict[tag.BlogTagId] = tagModel;
                     }
 
-                    if (tagDict.TryGetValue(tag.TagId, out var tg))
+                    if (tagDict.TryGetValue(tag.BlogTagId, out var tg))
                     {
                         var tgx = new BlogPostV1TagResponse();
                         tgx.FromModel(tg);
@@ -192,13 +190,13 @@ public class BullseyeApiController : Controller
     /// <summary>
     /// Get the latest version of <see cref="BullseyeV1"/> for the App Id provided.
     /// </summary>
-    /// <param name="appId"><see cref="BullseyeAppModel.ApplicationDetailModelId"/></param>
+    /// <param name="appId"><see cref="ApplicationBullseyeModel.ApplicationDetailModelId"/></param>
     /// <param name="liveState">Will be ignored and assumed as <see langword="true"/> when requesting user doesn't have <see cref="PermissionKind.BullseyeViewPrivateModels"/></param>
     [ProducesResponseType(typeof(BullseyeV1), 200, "application/json")]
     [ProducesResponseType(typeof(NotFoundWebResponse), 404, "application/json")]
     [ProducesResponseType(typeof(ExceptionWebResponse), 500, "application/json")]
     [HttpGet("~/api/v1/Bullseye/{appId}")]
-    public async Task<ActionResult> GetV1(string appId, bool? liveState = null)
+    public async Task<ActionResult> GetV1(Guid appId, bool? liveState = null)
     {
         try
         {
@@ -207,10 +205,10 @@ public class BullseyeApiController : Controller
             {
                 Response.StatusCode = 404;
                 return Json(new NotFoundWebResponse(
-                    typeof(BullseyeAppModel),
-                    nameof(BullseyeAppModel.Id),
+                    typeof(ApplicationBullseyeModel),
+                    nameof(ApplicationBullseyeModel.ApplicationId),
                     appId,
-                    $"Could not find model in {nameof(BullseyeAppRevisionRepository)} {nameof(appId)}"), BaseService.SerializerOptions);
+                    $"Could not find model in {nameof(BullseyeRevisionRepository)} {nameof(appId)}"), BaseService.SerializerOptions);
             }
             
             bool includePrivate = true;
@@ -244,14 +242,14 @@ public class BullseyeApiController : Controller
             }
 
             // pretend 404 when not kachemak
-            if (appDetailModel.Type != ApplicationDetailType.Kachemak)
+            if (appDetailModel.Type != ApplicationType.Kachemak)
             {
                 Response.StatusCode = 404;
                 return Json(new NotFoundWebResponse(
-                    typeof(BullseyeAppModel),
-                    nameof(BullseyeAppModel.Id),
+                    typeof(ApplicationBullseyeModel),
+                    nameof(ApplicationBullseyeModel.ApplicationId),
                     appId,
-                    $"Could not find model in {nameof(BullseyeAppRevisionRepository)} {nameof(appId)}"), BaseService.SerializerOptions);
+                    $"Could not find model in {nameof(BullseyeRevisionRepository)} {nameof(appId)}"), BaseService.SerializerOptions);
             }
 
             // always get live-only model when user has permission BullseyeViewPrivateModels
@@ -273,13 +271,13 @@ public class BullseyeApiController : Controller
     /// <summary>
     /// Get the latest version of <see cref="BullseyeV2"/> for the App Id provided.
     /// </summary>
-    /// <param name="appId"><see cref="BullseyeAppModel.ApplicationDetailModelId"/></param>
+    /// <param name="appId"><see cref="ApplicationBullseyeModel.ApplicationDetailModelId"/></param>
     /// <param name="liveState">Will be ignored and assumed as <see langword="true"/> when requesting user doesn't have <see cref="PermissionKind.BullseyeViewPrivateModels"/></param>
     [ProducesResponseType(typeof(BullseyeV2), 200, "application/json")]
     [ProducesResponseType(typeof(NotFoundWebResponse), 404, "application/json")]
     [ProducesResponseType(typeof(ExceptionWebResponse), 500, "application/json")]
     [HttpGet("~/api/v2/Bullseye/{appId}")]
-    public async Task<ActionResult> GetV2(string appId, bool? liveState = null)
+    public async Task<ActionResult> GetV2(Guid appId, bool? liveState = null)
     {
         try
         {
@@ -288,10 +286,10 @@ public class BullseyeApiController : Controller
             {
                 Response.StatusCode = 404;
                 return Json(new NotFoundWebResponse(
-                    typeof(BullseyeAppModel),
-                    nameof(BullseyeAppModel.Id),
+                    typeof(ApplicationBullseyeModel),
+                    nameof(ApplicationBullseyeModel.ApplicationId),
                     appId,
-                    $"Could not find model in {nameof(BullseyeAppRevisionRepository)} {nameof(appId)}"), BaseService.SerializerOptions);
+                    $"Could not find model in {nameof(BullseyeRevisionRepository)} {nameof(appId)}"), BaseService.SerializerOptions);
             }
             bool includePrivate = true;
             var user = await _authWebService.GetCurrentUser(HttpContext);
@@ -324,14 +322,14 @@ public class BullseyeApiController : Controller
             }
 
             // pretend 404 when not kachemak
-            if (appDetailModel.Type != ApplicationDetailType.Kachemak)
+            if (appDetailModel.Type != ApplicationType.Kachemak)
             {
                 Response.StatusCode = 404;
                 return Json(new NotFoundWebResponse(
-                    typeof(BullseyeAppModel),
-                    nameof(BullseyeAppModel.Id),
+                    typeof(ApplicationBullseyeModel),
+                    nameof(ApplicationBullseyeModel.ApplicationId),
                     appId,
-                    $"Could not find model in {nameof(BullseyeAppRevisionRepository)} {nameof(appId)}"), BaseService.SerializerOptions);
+                    $"Could not find model in {nameof(BullseyeRevisionRepository)} {nameof(appId)}"), BaseService.SerializerOptions);
             }
 
             // always get live-only model when user has permission BullseyeViewPrivateModels

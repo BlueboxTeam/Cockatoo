@@ -6,7 +6,7 @@ public class SouthbankCacheModel
 
     public SouthbankCacheModel()
     {
-        ApplicationId = Guid.Empty;
+        Id = Guid.NewGuid();
         CreatedAt = DateTimeOffset.UtcNow;
         V1 = new();
         V2 = new();
@@ -14,9 +14,9 @@ public class SouthbankCacheModel
     }
 
     /// <summary>
-    /// Foreign Key to <see cref="ApplicationModel.Id"/>
+    /// Primary Key
     /// </summary>
-    public Guid ApplicationId { get; set; }
+    public Guid Id { get; set; }
 
     /// <summary>
     /// When this record was created (UTC)

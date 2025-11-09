@@ -54,7 +54,7 @@ public class BullseyePatchModel
     /// Foreign Key to <see cref="StorageFileModel.Id"/>
     /// </remarks>
     [DefaultValue(null)]
-    public Guid? TorrentStorageFileId { get; set; }
+    public Guid? PeerToPeerStorageFileId { get; set; }
 
     /// <summary>
     /// When this patch was created.

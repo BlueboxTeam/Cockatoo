@@ -10,7 +10,7 @@ namespace Adastral.Cockatoo.Shared.AspNet;
 
 partial class StartupGlue
 {
-    private void Authentication(IServiceCollection services)
+    public static void Authentication(IServiceCollection services)
     {
         var cfg = AppConfig.Instance;
         if (cfg.Auth.OAuth.Count < 1) return;

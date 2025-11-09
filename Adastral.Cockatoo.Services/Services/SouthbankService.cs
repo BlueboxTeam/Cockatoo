@@ -13,7 +13,7 @@ public class SouthbankService : BaseService
 {
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
     private readonly SouthbankCacheRepository _sbCacheRepo;
-    private readonly ApplicationDetailRepository _appDetailRepo;
+    private readonly ApplicationRepository _appDetailRepo;
     private readonly ApplicationImageRepository _appImageRepo;
     private readonly ApplicationColorRepository _appColorRepo;
     private readonly StorageService _storageService;
@@ -24,7 +24,7 @@ public class SouthbankService : BaseService
     {
         _config = services.GetRequiredService<CockatooConfig>();
         _sbCacheRepo = services.GetRequiredService<SouthbankCacheRepository>();
-        _appDetailRepo = services.GetRequiredService<ApplicationDetailRepository>();
+        _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
         _appImageRepo = services.GetRequiredService<ApplicationImageRepository>();
         _appColorRepo = services.GetRequiredService<ApplicationColorRepository>();
         _storageService = services.GetRequiredService<StorageService>();
@@ -54,7 +54,7 @@ public class SouthbankService : BaseService
         }
         foreach (var app in apps)
         {
-            if (app.IsPrivate || app.Type != ApplicationDetailType.Kachemak || app.IsHidden)
+            if (app.IsPrivate || app.Type != ApplicationType.Kachemak || app.IsHidden)
             {
                 continue;
             }
@@ -63,15 +63,15 @@ public class SouthbankService : BaseService
             var v1_i = new SouthbankV1GameItem();
             var v2_i = new SouthbankV2GameItem();
             var v3_i = new SouthbankV3GameItem();
-            v1_i.Name = app.DisplayName ?? app.Id;
-            v2_i.Name = app.DisplayName ?? app.Id;
-            v3_i.Name = app.DisplayName ?? app.Id;
+            v1_i.Name = app.DisplayName ?? app.Id.ToString();
+            v2_i.Name = app.DisplayName ?? app.Id.ToString();
+            v3_i.Name = app.DisplayName ?? app.Id.ToString();
             v1_i.VersionMethod = 0;
             v2_i.VersionMethod = 0;
             v3_i.VersionMethod = 0;
-            v3_i.BaseAppId = app.AppVarData.Mod.BaseAppId;
-            v3_i.RequireProton = app.AppVarData.Mod.RequireProton;
-            v3_i.RequiredAppIds = app.AppVarData.Mod.RequiredAppIds;
+            v3_i.BaseAppId = app.SourceMod.BaseAppId;
+            v3_i.RequireProton = app.SourceMod.RequireProton;
+            v3_i.RequiredAppIds = app.SourceMod.RequiredAppIds;
             if (v3_i.BaseAppId == 0)
             {
                 v3_i.BaseAppId = null;
@@ -87,7 +87,7 @@ public class SouthbankService : BaseService
                     var xh = await _storageService.GetHash(x);
                     switch (x.Kind)
                     {
-                        case ApplicationImageKind.Icon:
+                        case ApplicationBrandAssetType.Icon:
                             if (string.IsNullOrEmpty(v1_i.BelmontDetails.IconUrl))
                             {
                                 v1_i.BelmontDetails.IconUrl = xn;
@@ -97,7 +97,7 @@ public class SouthbankService : BaseService
                                 xh
                             ];
                             break;
-                        case ApplicationImageKind.Star:
+                        case ApplicationBrandAssetType.Star:
                             if (string.IsNullOrEmpty(v1_i.BelmontDetails.StarUrl))
                             {
                                 v1_i.BelmontDetails.StarUrl = xn;
@@ -107,7 +107,7 @@ public class SouthbankService : BaseService
                                 xh
                             ];
                             break;
-                        case ApplicationImageKind.Wordmark:
+                        case ApplicationBrandAssetType.Wordmark:
                             if (string.IsNullOrEmpty(v1_i.BelmontDetails.WordmarkUrl))
                             {
                                 v1_i.BelmontDetails.WordmarkUrl = xn;
@@ -117,7 +117,7 @@ public class SouthbankService : BaseService
                                 xh
                             ];
                             break;
-                        case ApplicationImageKind.Background:
+                        case ApplicationBrandAssetType.Background:
                             if (string.IsNullOrEmpty(v1_i.BelmontDetails.BackgroundUrl))
                             {
                                 v1_i.BelmontDetails.BackgroundUrl = xn;
@@ -135,37 +135,37 @@ public class SouthbankService : BaseService
             {
                 foreach (var c in color)
                 {
-                    switch (c.Kind)
+                    switch (c.Type)
                     {
-                        case ApplicationColorKind.Dark:
+                        case ApplicationBrandColorType.Dark:
                             v1_i.BelmontDetails.ColorDark = c.Value;
                             v2_i.BelmontDetails.ColorDark = c.Value;
                             break;
-                        case ApplicationColorKind.Light:
+                        case ApplicationBrandColorType.Light:
                             v1_i.BelmontDetails.ColorLight = c.Value;
                             v2_i.BelmontDetails.ColorLight = c.Value;
                         break;
-                        case ApplicationColorKind.Main:
+                        case ApplicationBrandColorType.Main:
                             v1_i.BelmontDetails.ColorMain = c.Value;
                             v2_i.BelmontDetails.ColorMain = c.Value;
                         break;
-                        case ApplicationColorKind.Accent:
+                        case ApplicationBrandColorType.Accent:
                             v1_i.BelmontDetails.ColorAccent = c.Value;
                             v2_i.BelmontDetails.ColorAccent = c.Value;
                         break;
-                        case ApplicationColorKind.Secondary:
+                        case ApplicationBrandColorType.Secondary:
                             v1_i.BelmontDetails.ColorSecondary = c.Value;
                             v2_i.BelmontDetails.ColorSecondary = c.Value;
                         break;
-                        case ApplicationColorKind.LightForeground:
+                        case ApplicationBrandColorType.LightForeground:
                             v1_i.BelmontDetails.ColorLightForeground = c.Value;
                             v2_i.BelmontDetails.ColorLightForeground = c.Value;
                         break;
-                        case ApplicationColorKind.Click:
+                        case ApplicationBrandColorType.Click:
                             v1_i.BelmontDetails.ColorClick = c.Value;
                             v2_i.BelmontDetails.ColorClick = c.Value;
                         break;
-                        case ApplicationColorKind.ClickT:
+                        case ApplicationBrandColorType.ClickT:
                             v1_i.BelmontDetails.ColorClickT = c.Value;
                             v2_i.BelmontDetails.ColorClickT = c.Value;
                         break;
@@ -175,9 +175,9 @@ public class SouthbankService : BaseService
 
             v3_i.BelmontDetails = v2_i.BelmontDetails;
 
-            var key = string.IsNullOrEmpty(app.AppVarData.Mod.SourceModName)
-                ? app.Id
-                : app.AppVarData.Mod.SourceModName;
+            var key = string.IsNullOrEmpty(app.SourceMod.FolderName)
+                ? app.Id.ToString()
+                : app.SourceMod.FolderName;
 
             v1.Games[key] = v1_i;
             v2.Games[key] = v2_i;
@@ -185,12 +185,12 @@ public class SouthbankService : BaseService
         }
 
         var model = new SouthbankCacheModel();
-        model.SetV1(v1);
-        model.SetV2(v2);
-        model.SetV3(v3);
-        model.SetTimestamp();
+        model.V1 = v1;
+        model.V2 = v2;
+        model.V3 = v3;
+        model.CreatedAt = DateTimeOffset.UtcNow;
         await _sbCacheRepo.InsertOrUpdate(model);
-        _log.Debug($"Inserted record {model.Id} at {model.Timestamp}");
+        _log.Debug($"Inserted record {model.ApplicationId} at {model.CreatedAt}");
         return model;
     }
 
@@ -215,10 +215,10 @@ public class SouthbankService : BaseService
                 }
                 catch (Exception ex)
                 {
-                    _log.Error($"Failed to run scheduled task {nameof(GenerateSouthbankScheduleHandler)}\n{ex}");
+                    _log.Error(ex, $"Failed to run scheduled task {nameof(GenerateSouthbankScheduleHandler)}");
                     SentrySdk.CaptureException(ex, (scope) =>
                     {
-                        scope.SetTag($"scheduledTaskName", nameof(GenerateSouthbankScheduleHandler));
+                        scope.SetTag("scheduledTaskName", nameof(GenerateSouthbankScheduleHandler));
                     });
                 }
             }).Start();
@@ -248,7 +248,7 @@ public class SouthbankService : BaseService
         }
         catch (Exception ex)
         {
-            _log.Error($"Failed to run {nameof(GenerateSouthbank)}\n{ex}");
+            _log.Error(ex, $"Failed to run {nameof(GenerateSouthbank)}");
             SentrySdk.CaptureException(ex);
             SentrySdk.CaptureCheckIn(slug, CheckInStatus.Error, checkInId);
         }

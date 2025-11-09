@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.8.34330.188
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11201.2 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Adastral.Cockatoo.MongoDataAccess", "Adastral.Cockatoo.MongoDataAccess\Adastral.Cockatoo.MongoDataAccess.csproj", "{55711613-E0FC-47AA-939C-03D7D3A4EBD8}"
 EndProject
@@ -24,6 +24,12 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.DataAccess", "Adastral.Cockatoo.DataAccess\Adastral.Cockatoo.DataAccess.csproj", "{1FC1077C-8189-47D0-A594-9274F9C7B7F5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.Shared.AspNet", "Adastral.Cockatoo.Shared.AspNet\Adastral.Cockatoo.Shared.AspNet.csproj", "{D51BDC86-38DC-43FC-803C-B6820F64B03C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.MongoMigrationConsole", "Adastral.Cockatoo.MongoMigrationConsole\Adastral.Cockatoo.MongoMigrationConsole.csproj", "{A6096D62-109C-49B8-9D85-838722D44F76}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Data Access", "Data Access", "{C607501A-C164-4207-9E1A-F90A6B3CAB1F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "MongoDB Legacy", "MongoDB Legacy", "{78D5FB46-312C-49CF-9F45-A0774965ADA3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -155,13 +161,28 @@ Global
 		{D51BDC86-38DC-43FC-803C-B6820F64B03C}.Release|x64.Build.0 = Release|Any CPU
 		{D51BDC86-38DC-43FC-803C-B6820F64B03C}.Release|x86.ActiveCfg = Release|Any CPU
 		{D51BDC86-38DC-43FC-803C-B6820F64B03C}.Release|x86.Build.0 = Release|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Debug|x64.Build.0 = Debug|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Debug|x86.Build.0 = Debug|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Release|x64.ActiveCfg = Release|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Release|x64.Build.0 = Release|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Release|x86.ActiveCfg = Release|Any CPU
+		{A6096D62-109C-49B8-9D85-838722D44F76}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{55711613-E0FC-47AA-939C-03D7D3A4EBD8} = {78D5FB46-312C-49CF-9F45-A0774965ADA3}
 		{827CBDB9-4731-480D-8293-D5773A4E8CBB} = {FE2ED145-EDA7-4FA4-BBEB-12019CE907B1}
 		{5ED97820-8A4F-4BBB-9477-8114C7AEBFA8} = {FE2ED145-EDA7-4FA4-BBEB-12019CE907B1}
+		{A6096D62-109C-49B8-9D85-838722D44F76} = {78D5FB46-312C-49CF-9F45-A0774965ADA3}
+		{78D5FB46-312C-49CF-9F45-A0774965ADA3} = {C607501A-C164-4207-9E1A-F90A6B3CAB1F}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BC4EC7AB-51D0-4E21-96EB-0B206BC1EC45}

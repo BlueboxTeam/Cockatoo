@@ -1,58 +1,58 @@
-using Adastral.Cockatoo.Common.Helpers;
 using Adastral.Cockatoo.Common;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using NLog;
-using NLog.Extensions.Logging;
-using Logger = NLog.Logger;
-using LogLevel = Microsoft.Extensions.Logging.LogLevel;
-using System.Data;
+using Adastral.Cockatoo.Common.Helpers;
 using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.Services;
 using Adastral.Cockatoo.Services.WebApi;
 using Adastral.Cockatoo.Services.WebApi.Controllers;
 using Adastral.Cockatoo.Services.WebApi.Models;
+using Adastral.Cockatoo.Shared.AspNet;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.IdentityModel.Logging;
 using Microsoft.OpenApi.Models;
+using NLog;
+using NLog.Extensions.Logging;
+using NLog.Web;
+using System.Data;
+using Logger = NLog.Logger;
+using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace Adastral.Cockatoo.WebApi;
 
-public class Program
+public static class Program
 {
-    private static readonly Logger _log = LogManager.GetCurrentClassLogger();
-    public static string Version => typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+    /*private static readonly Logger _log = LogManager.GetCurrentClassLogger();
+    public static string Version => typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";*/
     public static void Main(string[] args)
     {
-        _log.Debug("Creating CoreContext");
-        var core = new CoreContext();
-        Console.WriteLine($"Public URL: {core.Config.PublicUrl}");
-        InitializeWebApplication(core, args);
-        core.AlternativeMain = async (a) =>
+        if (args.FirstOrDefault()?.Trim().Equals("docker", StringComparison.OrdinalIgnoreCase) ?? false)
         {
-            if (WebApp == null)
-            {
-                throw new NoNullAllowedException($"{nameof(WebApplication)} is null");
-            }
-            _log.Debug("Running Server");
-            await WebApp.StartAsync();
-            await Task.Delay(-1);
-        };
-        if (WebAppBuilder == null)
-        {
-            throw new NoNullAllowedException($"{nameof(WebAppBuilder)} is null");
+            Environment.SetEnvironmentVariable(FeatureFlags.RunningInDockerName, "true");
         }
-        core.MainAsync(args, (s) =>
+        if (FeatureFlags.IsDevelopmentEnvironment || FeatureFlags.ShowPrivateInformationWithAspNet)
         {
-            AttributeHelper.InjectControllerAttributes(typeof(BaseService).Assembly, s); // Adastral.Cockatoo.Common
-            AttributeHelper.InjectControllerAttributes(typeof(CoreContext).Assembly, s); // Adastral.Cockatoo.Services.Core
-            AttributeHelper.InjectControllerAttributes(typeof(S3Service).Assembly, s); // Adastral.Cockatoo.Services
-            AttributeHelper.InjectControllerAttributes(typeof(BaseRepository<>).Assembly, s); // Adastral.Cockatoo.DataAccess
-            AttributeHelper.InjectControllerAttributes(typeof(EndpointMessages).Assembly, s); // Adastral.Cockatoo.Services.WebApi.Models
-            AttributeHelper.InjectControllerAttributes(typeof(AuthRequiredAttribute).Assembly, s); // Adastral.Cockatoo.Services.WebApi
-            AttributeHelper.InjectControllerAttributes(typeof(Program).Assembly, s); // Adastral.Cockatoo.WebApi
-            return Task.CompletedTask;
-        }, WebAppBuilder.Services).Wait();
+            IdentityModelEventSource.ShowPII = true;
+            IdentityModelEventSource.LogCompleteSecurityArtifact = true;
+        }
+
+        StartupGlue.InitializeNLog();
+        StartupGlue.CheckConfiguration();
+        RunServer(ref args);
     }
-    private static WebApplication? WebApp = null;
+
+    private static void RunServer(ref string[] args)
+    {
+        var h = Host.CreateDefaultBuilder(args)
+            .UseNLog().ConfigureWebHostDefaults(webBuilder =>
+            {
+                webBuilder.UseStartup<Startup>();
+                StartupGlue.ApplyWebHostBuilder(webBuilder);
+            });
+        h.RunConsoleAsync().Wait();
+    }
+    /*private static WebApplication? WebApp = null;
     private static WebApplicationBuilder? WebAppBuilder = null;
 
     private static void InitializeWebApplication(CoreContext core, string[] args)
@@ -212,5 +212,5 @@ public class Program
                 throw new ArgumentException($"Does not equal {nameof(builder)}.{nameof(builder.Services)}!", nameof(col));
             }
         };
-    }
+    }*/
 }

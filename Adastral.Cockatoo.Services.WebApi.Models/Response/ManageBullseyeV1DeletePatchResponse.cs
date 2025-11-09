@@ -1,8 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 using System.Xml.Serialization;
-using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
-using MongoDB.Bson.Serialization.Attributes;
 
 namespace Adastral.Cockatoo.Services.WebApi.Models.Response;
 
@@ -10,7 +8,6 @@ public class ManageBullseyeV1DeletePatchResponse
 {
     [JsonPropertyName("_type")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
-    [BsonIgnore]
     [XmlIgnore]
     [SoapIgnore]
     public string Type => GetType().Name;
@@ -20,7 +17,7 @@ public class ManageBullseyeV1DeletePatchResponse
     /// <summary>
     /// Requested <see cref="BullseyePatchModel.Id"/> to be deleted.
     /// </summary>
-    public string RequestPatchId { get; set; } = "";
+    public Guid RequestPatchId { get; set; } = Guid.Empty;
     
     /// <summary>
     /// Instance of <see cref="BullseyePatchModel"/> that was deleted from the database.
@@ -44,5 +41,5 @@ public class ManageBullseyeV1DeletePatchResponse
     /// <para><b>Value:</b> <see cref="Exception"/> turned into <see cref="ExceptionWebResponse"/></para>
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Dictionary<string, ExceptionWebResponse>? DeleteFileExceptions { get; set; }
+    public Dictionary<Guid, ExceptionWebResponse>? DeleteFileExceptions { get; set; }
 }

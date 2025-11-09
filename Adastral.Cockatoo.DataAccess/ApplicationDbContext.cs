@@ -1,4 +1,5 @@
 using Adastral.Cockatoo.DataAccess.Models;
+using Adastral.Cockatoo.DataAccess.Models.AutoUpdaterDotNet;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -32,9 +33,11 @@ public class ApplicationDbContext
     public DbSet<ServiceAccountModel> ServiceAccounts { get; set; }
     public DbSet<ServiceAccountTokenModel> ServiceAccountTokens { get; set; }
 
+    #region Application
     public DbSet<ApplicationModel> Applications { get; set; }
     public DbSet<ApplicationSourceModModel> ApplicationSourceMods { get; set; }
-    public DbSet<ApplicationBrandingModel> ApplicationBrands { get; set; }
+    public DbSet<ApplicationBrandAssetModel> ApplicationBrandAssets { get; set; }
+    public DbSet<ApplicationBrandColorModel> ApplicationBrandColors { get; set; }
 
     public DbSet<ApplicationBullseyeModel> ApplicationBullseye { get; set; }
     public DbSet<BullseyePatchModel> BullseyePatches { get; set; }
@@ -42,18 +45,24 @@ public class ApplicationDbContext
     public DbSet<BullseyeV1CacheModel> BullseyeCacheV1 { get; set; }
     public DbSet<BullseyeV2CacheModel> BullseyeCacheV2 { get; set; }
     public DbSet<SouthbankCacheModel> SouthbankCache { get; set; }
+    public DbSet<AutoUpdaterDotNetRevisionModel> AutoUpdaterDotNetRevisions { get; set; } // TODO fluent config
+    #endregion
 
+    #region Groups
     public DbSet<GroupModel> Groups { get; set; }
     public DbSet<GroupMembershipModel> GroupMemberships { get; set; }
     public DbSet<GroupPermissionApplicationModel> GroupApplicationPermissions { get; set; }
     public DbSet<GroupPermissionGlobalModel> GroupGlobalPermissions { get; set; }
+    #endregion
 
+    #region Blog
     public DbSet<BlogPostModel> BlogPosts { get; set; }
     public DbSet<BlogPostAttachmentModel> BlogPostAttachments { get; set; }
     public DbSet<BlogPostAuthorModel> BlogPostAuthors { get; set; }
     public DbSet<BlogPostTagModel> BlogPostTags { get; set; }
     public DbSet<BlogTagModel> BlogTags { get; set; }
-    
+    #endregion
+
     // NOTE ScopedApplicationRoleModel will be used in the future to replace GroupPermissions
     public DbSet<ScopedApplicationRoleModel> ScopedApplicationRoles { get; set; }
 
@@ -61,32 +70,46 @@ public class ApplicationDbContext
     {
         base.OnModelCreating(builder);
 
+        builder.Entity<StorageFileModel>(b =>
+        {
+            b.ToTable(StorageFileModel.TableName).HasKey(e => e.Id);
+
+            b.HasIndex(e => e.CreatedAt).IsDescending().IsUnique(false);
+
+            b.HasOne(e => e.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.CreatedByUserId);
+        });
+
         #region Application
         builder.Entity<ApplicationModel>(b =>
         {
             b.ToTable(ApplicationModel.TableName).HasKey(e => e.Id);
 
-            b.HasOne(e => e.Branding)
+            b.HasMany(e => e.BrandColors)
                 .WithOne()
-                .HasForeignKey<ApplicationBrandingModel>(e => e.ApplicationId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .IsRequired(true);
+                .HasForeignKey(e => e.ApplicationId)
+                .IsRequired();
+            b.HasMany(e => e.BrandAssets)
+                .WithOne()
+                .HasForeignKey(e => e.ApplicationId)
+                .IsRequired();
 
             b.HasOne(e => e.SourceMod)
                 .WithOne()
                 .HasForeignKey<ApplicationSourceModModel>(e => e.ApplicationId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .IsRequired(true);
-
-            b.HasOne(e => e.SouthbankCache)
-                .WithOne()
-                .HasForeignKey<SouthbankCacheModel>(e => e.ApplicationId)
-                .OnDelete(DeleteBehavior.SetNull)
-                .IsRequired(false);
         });
-        builder.Entity<ApplicationBrandingModel>(b =>
+        builder.Entity<ApplicationBrandColorModel>(b =>
         {
-            b.ToTable(ApplicationBrandingModel.TableName).HasKey(e => e.ApplicationId);
+            b.ToTable(ApplicationBrandColorModel.TableName)
+            .HasKey(e => new { e.ApplicationId, e.Type });
+        });
+        builder.Entity<ApplicationBrandAssetModel>(b =>
+        {
+            b.ToTable(ApplicationBrandAssetModel.TableName)
+            .HasKey(e => new { e.ApplicationId, e.Type });
         });
         builder.Entity<ApplicationSourceModModel>(b =>
         {
@@ -132,7 +155,7 @@ public class ApplicationDbContext
 
         builder.Entity<SouthbankCacheModel>(b =>
         {
-            b.ToTable(SouthbankCacheModel.TableName).HasKey(e => e.ApplicationId);
+            b.ToTable(SouthbankCacheModel.TableName).HasKey(e => e.Id);
             b.HasIndex(e => e.CreatedAt).IsUnique(false).IsDescending(true);
 
             b.ComplexProperty(p => p.V1, d => d.ToJson());
@@ -237,17 +260,6 @@ public class ApplicationDbContext
             b.ToTable(BlogTagModel.TableName).HasKey(e => e.Id);
         });
         #endregion
-
-        builder.Entity<StorageFileModel>(b =>
-        {
-            b.ToTable(StorageFileModel.TableName).HasKey(e => e.Id);
-
-            b.HasIndex(e => e.CreatedAt).IsDescending().IsUnique(false);
-            
-            b.HasOne(e => e.CreatedByUser)
-                .WithMany()
-                .HasForeignKey(e => e.CreatedByUserId);
-        });
 
         // will be used in the future to replace GroupPermissions
         builder.Entity<ScopedApplicationRoleModel>(b =>

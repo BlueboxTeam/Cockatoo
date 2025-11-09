@@ -1,5 +1,4 @@
 ﻿using Adastral.Cockatoo.Common;
-using Adastral.Cockatoo.Common.Helpers;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Adastral.Cockatoo.Services.WebApi.Helpers;
@@ -7,7 +6,6 @@ using Adastral.Cockatoo.Services.WebApi.Models.Response;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
-using Sentry.Protocol;
 
 namespace Adastral.Cockatoo.Services.WebApi;
 
@@ -15,14 +13,14 @@ namespace Adastral.Cockatoo.Services.WebApi;
 public class ScopedPermissionWebService : BaseService
 {
     private readonly AuthWebService _authWebService;
-    private readonly ApplicationDetailRepository _applicationDetailRepository;
+    private readonly ApplicationRepository _applicationDetailRepository;
     private readonly PermissionService _permissionService;
     private readonly PermissionCacheService _permissionCacheService;
     public ScopedPermissionWebService(IServiceProvider services)
         : base(services)
     {
         _authWebService = services.GetRequiredService<AuthWebService>();
-        _applicationDetailRepository = services.GetRequiredService<ApplicationDetailRepository>();
+        _applicationDetailRepository = services.GetRequiredService<ApplicationRepository>();
         _permissionService = services.GetRequiredService<PermissionService>();
         _permissionCacheService = services.GetRequiredService<PermissionCacheService>();
     }
@@ -33,7 +31,10 @@ public class ScopedPermissionWebService : BaseService
         public required ActionResult ActionResult { get; init; }
     }
 
-    public async Task<HandleManualCheckResult?> HandleManualCheck(HttpContext httpContext, string applicationId, params PermissionKind[] kinds)
+    public async Task<HandleManualCheckResult?> HandleManualCheck(
+        HttpContext httpContext,
+        Guid applicationId,
+        params PermissionKind[] kinds)
     {
         var user = await _authWebService.GetCurrentUser(httpContext);
         if (user == null)
@@ -52,7 +53,7 @@ public class ScopedPermissionWebService : BaseService
                     StatusCode = 404,
                     ActionResult = new JsonResult(new NotFoundResponse()
                     {
-                        Message = $"Could not find {nameof(ApplicationDetailModel)} with Id {applicationId}",
+                        Message = $"Could not find {nameof(ApplicationModel)} with Id {applicationId}",
                         PropertyName = nameof(applicationId),
                     }, SerializerOptions)
                 };
@@ -72,7 +73,7 @@ public class ScopedPermissionWebService : BaseService
 
     public bool TryHandleManualCheck(
         HttpContext httpContext,
-        string applicationId,
+        Guid applicationId,
         PermissionKind kind,
         out HandleManualCheckResult? result)
     {
@@ -110,13 +111,13 @@ public class ScopedPermissionWebService : BaseService
         switch (kind)
         {
             case ScopedPermissionKeyKind.ApplicationId:
-                return await CheckApplicationScopedPermission(kindValue?.ToString() ?? "", user, permissionRequired);
+                return await CheckApplicationScopedPermission((Guid)kindValue!, user, permissionRequired);
         }
         throw new NotImplementedException($"Kind {kind} has not been implemented!");
     }
 
     public async Task<CheckScopedPermissionResult> CheckApplicationScopedPermission(
-        string applicationId,
+        Guid applicationId,
         UserModel user,
         List<PermissionKind> permissionsRequired)
     {
