@@ -2,19 +2,16 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Adastral.Cockatoo.Common;
 using NLog;
-using Sentry;
 
 namespace Adastral.Cockatoo.Services;
 
-[CockatooDependency]
-public class SteamAPIService : BaseService
+public class SteamApiService
 {
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
-    public SteamAPIService(IServiceProvider services)
-        : base(services)
+    public SteamApiService(IServiceProvider services)
     { }
 
-    public override async Task InitializeAsync()
+    public async Task InitializeAsync()
     {
         try
         {
@@ -22,8 +19,7 @@ public class SteamAPIService : BaseService
         }
         catch (Exception ex)
         {
-            _log.Error(ex.ToString());
-            SentrySdk.CaptureException(ex);
+            _log.Error(ex);
         }
     }
 
@@ -38,10 +34,7 @@ public class SteamAPIService : BaseService
         if (response.IsSuccessStatusCode)
         {
             var deser = JsonSerializer.Deserialize<GetAppsListV2Response>(responseText, BaseService.SerializerOptions) ?? new();
-            lock (GetAppsListCache)
-            {
-                GetAppsListCache = deser.AppList.Apps.DistinctBy(v => v.AppId).ToDictionary(v => v.AppId, v => v);
-            }
+            GetAppsListCache = deser.AppList.Apps.DistinctBy(v => v.AppId).ToDictionary(v => v.AppId, v => v);
         }
         else
         {

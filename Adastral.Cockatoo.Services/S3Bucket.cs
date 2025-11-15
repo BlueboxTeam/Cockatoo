@@ -1,5 +1,4 @@
-﻿using Amazon.Runtime.SharedInterfaces;
-using Amazon.S3;
+﻿using Amazon.S3;
 using Amazon.S3.Model;
 using NLog;
 
@@ -37,7 +36,7 @@ public static class S3Bucket
         }
         catch (AmazonS3Exception ex)
         {
-            _log.Error($"Failed to create bucket {bucketName}. {ex.Message}");
+            _log.Error(ex, $"Failed to create bucket {bucketName}");
             throw;
         }
     }

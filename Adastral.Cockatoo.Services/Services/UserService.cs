@@ -1,26 +1,19 @@
-﻿using Adastral.Cockatoo.Common;
+﻿using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
-using Adastral.Cockatoo.DataAccess.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Bson;
 
 namespace Adastral.Cockatoo.Services;
 
-[CockatooDependency]
-public class UserService : BaseService
+public class UserService
 {
-    private readonly UserRepository _userRepository;
-    private readonly ServiceAccountRepository _serviceAccountRepository;
-    private readonly ServiceAccountTokenRepository _serviceAccountTokenRepo;
     private readonly PermissionService _permissionService;
+    private readonly ApplicationDbContext _db;
 
     public UserService(IServiceProvider services)
-        : base(services)
     {
-        _userRepository = services.GetRequiredService<UserRepository>();
-        _serviceAccountRepository = services.GetRequiredService<ServiceAccountRepository>();
-        _serviceAccountTokenRepo = services.GetRequiredService<ServiceAccountTokenRepository>();
         _permissionService = services.GetRequiredService<PermissionService>();
+        _db = services.GetRequiredService<ApplicationDbContext>();
     }
 
     public async Task<UserModel> CreateServiceAccount(UserModel owner, string? name = null)
@@ -31,38 +24,53 @@ public class UserService : BaseService
         }
         var userModel = new UserModel()
         {
-            DisplayName = name ?? "Service Account",
             Email = null,
             IsServiceAccount = true
         };
-        userModel.SetCreatedAtTimestamp();
         var saModel = new ServiceAccountModel()
         {
             OwnerUserId = owner.Id,
             UserId = userModel.Id
         };
-        await _userRepository.InsertOrUpdate(userModel);
-        await _serviceAccountRepository.InsertOrUpdate(saModel);
+        await using var ctx = _db.CreateSession();
+        await using var trans = await ctx.Database.BeginTransactionAsync();
+        try
+        {
+
+            await ctx.Users.AddAsync(userModel);
+            await ctx.ServiceAccounts.AddAsync(saModel);
+            await ctx.SaveChangesAsync();
+            await trans.CommitAsync();
+        }
+        catch
+        {
+            await trans.RollbackAsync();
+            throw;
+        }
         return userModel;
     }
 
-    public async Task<ServiceAccountTokenModel> CreateToken(UserModel target, long? expiresAt)
+    public async Task<ServiceAccountTokenModel> CreateToken(UserModel target, DateTimeOffset? expiresAt)
     {
-        if (target.IsServiceAccount == false)
+        if (!target.IsServiceAccount)
         {
             throw new ArgumentException($"Provided user is not a Service Account", nameof(target));
         }
         var model = new ServiceAccountTokenModel()
         {
             ServiceAccountId = target.Id,
-            ExpiresAtTimestamp = expiresAt == null ? null : new BsonTimestamp((long)expiresAt)
+            ExpiresAt = expiresAt
         };
-        return await _serviceAccountTokenRepo.InsertOrUpdate(model);
+        await using var ctx = _db.CreateSession();
+        await ctx.ServiceAccountTokens.AddAsync(model);
+        await ctx.SaveChangesAsync();
+        return await ctx.ServiceAccountTokens.AsNoTracking()
+            .SingleAsync(e => e.Id == model.Id);
     }
 
     public async Task<CanUserCreateTokenKind> CanCreateTokenFor(UserModel requestingUser, UserModel targetUser)
     {
-        if (targetUser.IsServiceAccount == false)
+        if (!targetUser.IsServiceAccount)
         {
             return CanUserCreateTokenKind.TargetUserIsNotServiceAccount;
         }
@@ -70,7 +78,8 @@ public class UserService : BaseService
         {
             return CanUserCreateTokenKind.RequestingUserIsServiceAccount;
         }
-        var serviceAccountModel = await _serviceAccountRepository.GetById(targetUser.Id);
+        var serviceAccountModel = await _db.ServiceAccounts.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.UserId == targetUser.Id);
         if (serviceAccountModel == null)
         {
             return CanUserCreateTokenKind.TargetUserIsNotServiceAccount;
@@ -81,7 +90,7 @@ public class UserService : BaseService
                 requestingUser,
                 PermissionService.PermissionFilterType.Any, 
                 PermissionKind.ServiceAccountAdmin);
-            if (check == false)
+            if (!check)
             {
                 return CanUserCreateTokenKind.RequestingUserIsNotOwner;
             }

@@ -7,7 +7,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Adastral.Cockatoo.Services.Core\Adastral.Cockatoo.Services.Core.csproj" />
       <ProjectReference Include="..\Adastral.Cockatoo.Common\Adastral.Cockatoo.Common.csproj" />
       <ProjectReference Include="..\Adastral.Cockatoo.DataAccess\Adastral.Cockatoo.DataAccess.csproj" />
       <ProjectReference Include="..\Adastral.Cockatoo.Services.WebApi.Models\Adastral.Cockatoo.Services.WebApi.Models.csproj" />

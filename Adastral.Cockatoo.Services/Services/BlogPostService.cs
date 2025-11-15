@@ -1,8 +1,5 @@
-using System.ComponentModel;
 using System.Data;
-using System.Diagnostics;
 using Adastral.Cockatoo.Common;
-using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Adastral.Cockatoo.Services.WebApi.Models.Request;
@@ -12,13 +9,11 @@ using NLog;
 
 namespace Adastral.Cockatoo.Services;
 
-[CockatooDependency]
 public class BlogPostService : BaseService
 {
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
     private readonly BlogPostRepository _blogPostRepo;
     private readonly BlogPostTagRepository _blogPostTagRepo;
-    private readonly BlogTagRepository _blogTagRepo;
     private readonly BlogPostAttachmentRepository _blogPostAttachmentRepo;
 
     private readonly StorageFileRepository _storageFileRepo;
@@ -40,11 +35,6 @@ public class BlogPostService : BaseService
     /// </summary>
     public async Task<BlogPostV1DeleteResponse> Delete(BlogPostV1DeleteRequest req)
     {
-        if (string.IsNullOrEmpty(req.Id))
-        {
-            throw new ArgumentException($"{nameof(BlogPostV1DeleteRequest)}.{nameof(req.Id)} is required", nameof(req));
-        }
-
         var model = await _blogPostRepo.GetById(req.Id);
         if (model == null)
         {
@@ -57,19 +47,32 @@ public class BlogPostService : BaseService
         };
 
         try
-        { await _blogPostRepo.Delete(model); }
+        {
+            await _blogPostRepo.Delete(req.DeletedByUserId, model);
+        }
         catch (Exception ex)
-        { result.ModelDeleteException = new(ex); }
+        {
+            result.ModelDeleteException = new(ex);
+        }
 
         try
-        { result.TagAssociations = await _blogPostTagRepo.DeleteForPost(model); }
+        {
+            result.TagAssociations = await _blogPostTagRepo.GetManyForPost(model.Id);
+            await _blogPostTagRepo.DeleteForPost(model.Id);
+        }
         catch (Exception ex)
-        { result.TagAssociationsDeleteException = new(ex); }
+        {
+            result.TagAssociationsDeleteException = new(ex);
+        }
 
         try
-        { result.Attachments = await _blogPostAttachmentRepo.DeleteForPost(model); }
+        {
+            result.Attachments = await _blogPostAttachmentRepo.DeleteForPost(model);
+        }
         catch (Exception ex)
-        { result.AttachmentsDeleteException = new(ex); }
+        {
+            result.AttachmentsDeleteException = new(ex);
+        }
 
         foreach (var attachment in result.Attachments)
         {

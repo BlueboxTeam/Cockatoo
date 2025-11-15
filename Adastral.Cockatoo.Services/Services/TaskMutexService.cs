@@ -1,4 +1,3 @@
-using Adastral.Cockatoo.Common;
 using Adastral.Cockatoo.Common.Helpers;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Repositories;
@@ -7,13 +6,11 @@ using NLog;
 
 namespace Adastral.Cockatoo.Services;
 
-[CockatooDependency]
-public class TaskMutexService : BaseService
+public class TaskMutexService
 {
     private readonly TaskMutexRepository _repo;
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
     public TaskMutexService(IServiceProvider services)
-        : base(services)
     {
         _repo = services.GetRequiredService<TaskMutexRepository>();
     }
@@ -24,6 +21,8 @@ public class TaskMutexService : BaseService
     /// <param name="timeout">When provided, it will only wait up to the amount provided (in milliseconds) before returning. When <see langword="null"/> or <c>-1</c>, it will wait forever.</param>
     public async Task<bool> Wait(Type type, string name, Dictionary<string, object>? opts = null, long? timeout = null)
     {
+        const int delay = 500;
+
         var start = DateTimeOffset.UtcNow;
         int count = 0;
         long timePassed = 0;
@@ -35,10 +34,10 @@ public class TaskMutexService : BaseService
                 break;
             }
 
-            await Task.Delay(100);
+            await Task.Delay(delay);
             if (timeout != null)
             {
-                timePassed += 100;
+                timePassed += delay;
                 if (timeout > 0 && timeout < timePassed)
                 {
                     _log.Debug($"Took too long! (timeout: {timeout}ms, timePassed: {timePassed}ms)");

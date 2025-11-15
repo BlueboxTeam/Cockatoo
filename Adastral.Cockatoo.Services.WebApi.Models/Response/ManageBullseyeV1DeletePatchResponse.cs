@@ -1,5 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 using System.Xml.Serialization;
+using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
 
 namespace Adastral.Cockatoo.Services.WebApi.Models.Response;

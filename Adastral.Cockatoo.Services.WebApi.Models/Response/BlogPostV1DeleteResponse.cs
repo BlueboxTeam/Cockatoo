@@ -37,12 +37,12 @@ public class BlogPostV1DeleteResponse
     /// <summary>
     /// Dictionary of deleted files. If something is missing in here, then something else depends on that file.
     /// </summary>
-    public Dictionary<string, StorageFileModel> DeletedFiles { get; set; } = new();
+    public Dictionary<Guid, StorageFileModel> DeletedFiles { get; set; } = new();
     /// <summary>
     /// Dictionary of Exceptions that were caught while deleting files used by the blog post provided.
     /// </summary>
     /// <remarks>
     /// <b>Key:</b> <see cref="BlogPostAttachmentModel.Id"/>
     /// </remarks>
-    public Dictionary<string, ExceptionWebResponse> DeletedFilesExceptions { get; set; } = new();
+    public Dictionary<Guid, ExceptionWebResponse> DeletedFilesExceptions { get; set; } = new();
 }

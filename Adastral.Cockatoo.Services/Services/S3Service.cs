@@ -1,17 +1,12 @@
-using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
-using Amazon;
-using Amazon.Internal;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
 using Adastral.Cockatoo.Common;
 using Adastral.Cockatoo.DataAccess.Models;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Driver;
 using NLog;
-using Adastral.Cockatoo.Common.Helpers;
 
 namespace Adastral.Cockatoo.Services;
 
@@ -19,16 +14,16 @@ namespace Adastral.Cockatoo.Services;
 public class S3Service : BaseService
 {
     private readonly IAmazonS3 _s3Client;
-    private readonly CockatooConfig _config;
+    private readonly AppConfig _config;
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
 
     public S3Service(IServiceProvider services)
         : base(services)
     {
-        _config = services.GetRequiredService<CockatooConfig>();
+        _config = services.GetRequiredService<AppConfig>();
         if (string.IsNullOrEmpty(_config.Storage.S3.ServiceUrl))
         {
-            throw new Exception($"Property {nameof(_config.Storage.S3.ServiceUrl)} in {_config.Storage.S3.GetType()} is required.");
+            throw new InvalidOperationException($"Missing Service URL in S3 configuration");
         }
 
         var conf = new AmazonS3Config()
@@ -57,7 +52,7 @@ public class S3Service : BaseService
         {
             if (string.IsNullOrEmpty(_config.Storage.S3.BucketName))
             {
-                throw new Exception($"Feature Flag {nameof(_config.Storage.S3.BucketName)} is required.");
+                throw new InvalidOperationException($"Bucket Name is missing from S3 configuration");
             }
 
             _log.Debug($"Fetching buckets, just to make sure that the bucket {_config.Storage.S3.BucketName} exists.");
@@ -80,7 +75,7 @@ public class S3Service : BaseService
         }
         catch (Exception ex)
         {
-            _log.Error($"Failed to initialize S3 Client\n{ex}");
+            _log.Error(ex, $"Failed to initialize S3 Client");
             SentrySdk.CaptureException(ex);
         }
     }
@@ -177,14 +172,17 @@ public class S3Service : BaseService
         {
             await stream.CopyToAsync(tf);
             tf.Seek(0, SeekOrigin.Begin);
-            LocalFileHashLookup[location] = BitConverter.ToString(hash.Hash ?? []).Replace("-", "").ToLower();
+            lock (LocalFileHashLookup)
+            {
+                LocalFileHashLookup[location] = BitConverter.ToString(hash.Hash ?? []).Replace("-", "").ToLower();
+            }
         }
         await UploadMultipartObject(tmpFileLocation, location);
         _log.Debug($"[location={location}] Deleting temporary file {tmpFileLocation}");
         File.Delete(tmpFileLocation);
     }
 
-    private Dictionary<string, string> LocalFileHashLookup = [];
+    private readonly Dictionary<string, string> LocalFileHashLookup = [];
 
     /// <summary>
     /// Upload a file via the location to S3.
@@ -245,9 +243,12 @@ public class S3Service : BaseService
         var result = await GetObject(location);
         if (fileWrite && string.IsNullOrEmpty(result.ChecksumSHA256))
         {
-            if (LocalFileHashLookup.TryGetValue(location, out var x))
+            lock (LocalFileHashLookup)
             {
-                result.ChecksumSHA256 = x;
+                if (LocalFileHashLookup.TryGetValue(location, out var x))
+                {
+                    result.ChecksumSHA256 = x;
+                }
             }
         }
         return result;

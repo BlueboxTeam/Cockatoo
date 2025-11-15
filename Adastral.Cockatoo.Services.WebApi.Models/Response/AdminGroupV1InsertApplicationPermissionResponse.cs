@@ -22,7 +22,7 @@ public class AdminGroupV1InsertApplicationPermissionResponse
     [Required]
     [JsonRequired]
     [JsonPropertyName("application")]
-    public ApplicationDetailModel Application { get; set; }
+    public ApplicationModel Application { get; set; } // TODO return contract of application
     /// <summary>
     /// Instance of <see cref="GroupPermissionApplicationModel"/> that was inserted into the database.
     /// </summary>

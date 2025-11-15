@@ -1,36 +1,37 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Adastral.Cockatoo.Common;
+using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Adastral.Cockatoo.DataAccess.Repositories.Group;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Driver;
 using NLog;
+using Sentry;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Adastral.Cockatoo.Services;
 
 [CockatooDependency]
-public class GroupService : BaseService
+public class GroupService
 {
     private readonly UserRepository _userRepo;
     private readonly GroupRepository _groupRepo;
     private readonly GroupUserAssociationRepository _groupUserAssocRepo;
-    private readonly MongoClient _mongoClient;
     private readonly GroupPermissionGlobalRepository _groupPermGlobalRepo;
     private readonly GroupPermissionApplicationRepository _groupPermAppRepo;
     private readonly PermissionCacheService _permissionCacheService;
+    private readonly ApplicationDbContext _db;
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
     public GroupService(IServiceProvider services)
-        : base(services)
     {
+        _db = services.GetRequiredService<ApplicationDbContext>();
         _userRepo = services.GetRequiredService<UserRepository>();
         _groupRepo = services.GetRequiredService<GroupRepository>();
         _groupUserAssocRepo = services.GetRequiredService<GroupUserAssociationRepository>();
         _groupPermGlobalRepo = services.GetRequiredService<GroupPermissionGlobalRepository>();
         _groupPermAppRepo = services.GetRequiredService<GroupPermissionApplicationRepository>();
         _permissionCacheService = services.GetRequiredService<PermissionCacheService>();
-        _mongoClient = services.GetRequiredService<MongoClient>();
     }
 
     #region Get Users In
@@ -40,12 +41,8 @@ public class GroupService : BaseService
     /// <remarks>
     /// Calls <see cref="GetUsersInAsync(GroupModel)"/> when the group could be found in <see cref="GroupRepository"/>
     /// </remarks>
-    public async Task<List<UserModel>> GetUsersInAsync(string groupId)
+    public async Task<List<UserModel>> GetUsersInAsync(Guid groupId)
     {
-        if (string.IsNullOrEmpty(groupId))
-        {
-            throw new ArgumentException($"Must not be null or empty", nameof(groupId));
-        }
         var group = await _groupRepo.GetById(groupId);
         if (group == null)
         {
@@ -85,34 +82,25 @@ public class GroupService : BaseService
     /// <remarks>
     /// Fetches the <see cref="GroupModel"/> and <see cref="UserModel"/>, then calls <see cref="AddUserAsync(GroupModel, UserModel)"/>
     /// </remarks>
-    public async Task AddUserAsync(string groupId, string userId)
+    public async Task AddUserAsync(Guid groupId, Guid userId)
     {
-        if (string.IsNullOrEmpty(groupId))
-        {
-            throw new ArgumentException($"Must not be null or empty", nameof(groupId));
-        }
-        if (string.IsNullOrEmpty(userId))
-        {
-            throw new ArgumentException($"Must not be null or empty", nameof(userId));
-        }
-
         var groupModel = await _groupRepo.GetById(groupId);
         var userModel = await _userRepo.GetById(userId);
 
         if (groupModel == null || userModel == null)
         {
-            throw new AggregateException([
-                new ArgumentException($"Could not find {nameof(GroupModel)} with Id {groupId}"),
-                new ArgumentException($"Could not find {nameof(UserModel)} with Id {userId}")
-            ]);
+            throw new AggregateException(
+                new ArgumentException($"Could not find {nameof(GroupModel)} with Id {groupId}", nameof(groupId)),
+                new ArgumentException($"Could not find {nameof(UserModel)} with Id {userId}", nameof(userId))
+            );
         }
         if (groupModel == null)
         {
-            throw new ArgumentException($"Could not find {nameof(GroupModel)} with Id {groupId}");
+            throw new ArgumentException($"Could not find {nameof(GroupModel)} with Id {groupId}", nameof(groupId));
         }
         if (userModel == null)
         {
-            throw new ArgumentException($"Could not find {nameof(UserModel)} with Id {userId}");
+            throw new ArgumentException($"Could not find {nameof(UserModel)} with Id {userId}", nameof(userId));
         }
 
         await AddUserAsync(groupModel, userModel);
@@ -136,36 +124,32 @@ public class GroupService : BaseService
             return;
         }
 
-        var session = await _mongoClient.StartSessionAsync();
-        session.StartTransaction();
-
+        await using var ctx = _db.CreateSession();
+        await using var trans = await ctx.Database.BeginTransactionAsync();
         try
         {
-            var model = new GroupUserAssociationModel()
-            {
-                UserId = user.Id,
-                GroupId = group.Id,
-                IsDeleted = false
-            };
-            model = await _groupUserAssocRepo.InsertOrUpdate(model);
-
-            await session.CommitTransactionAsync();
+            await ctx.GroupMemberships
+                .Where(e
+                    => e.GroupId == group.Id
+                    && e.UserId == user.Id
+                    && !e.IsDeleted)
+                .ExecuteUpdateAsync(e => e
+                .SetProperty(p => p.IsDeleted, true));
+            await ctx.SaveChangesAsync();
+            await trans.CommitAsync();
         }
         catch (Exception ex)
         {
-            await session.AbortTransactionAsync();
-            session.Dispose();
-            _log.Error($"Failed to add user {user.FormatName()} into group {group.FormatName()} (userId: {user.Id}, groupId: {group.Id})\n{ex}");
+            await trans.RollbackAsync();
             SentrySdk.CaptureException(ex, (scope) =>
             {
                 scope.SetExtra("group", group);
                 scope.SetExtra("user", user);
-                scope.SetTag("param.group.Id", group.Id);
-                scope.SetTag("param.user.Id", user.Id);
+                scope.SetTag("param.group.Id", group.Id.ToString());
+                scope.SetTag("param.user.Id", user.Id.ToString());
             });
             throw;
         }
-        session.Dispose();
     }
     #endregion
 
@@ -177,12 +161,8 @@ public class GroupService : BaseService
     /// Fetches <see cref="GroupModel"/> by the <paramref name="groupId"/> provided, tries to get all instances of <see cref="UserModel"/>
     /// where the ID matches (for all items in <paramref name="userIds"/>), then calls <see cref="AddManyUsersAsync(GroupModel, IEnumerable{UserModel})"/>
     /// </remarks>
-    public async Task AddManyUsersAsync(string groupId, IEnumerable<string> userIds)
+    public async Task AddManyUsersAsync(Guid groupId, params IEnumerable<Guid> userIds)
     {
-        if (string.IsNullOrEmpty(groupId))
-        {
-            throw new ArgumentException($"Must not be null or empty", nameof(groupId));
-        }
         var group = await _groupRepo.GetById(groupId);
         if (group == null)
         {
@@ -196,26 +176,19 @@ public class GroupService : BaseService
     /// <remarks>
     /// Fetches all users in <paramref name="userIds"/>, then passes that through to <see cref="AddManyUsersAsync(GroupModel, IEnumerable{UserModel})"/>
     /// </remarks>
-    public async Task AddManyUsersAsync(GroupModel group, IEnumerable<string> userIds)
+    public async Task AddManyUsersAsync(GroupModel group, params IEnumerable<Guid> userIds)
     {
-        if (userIds.Count() < 1)
-        {
-            throw new ArgumentException($"Must have one or more IDs", nameof(userIds));
-        }
         var userList = new List<UserModel>();
-        foreach (var id in userIds.Select(v => v.Trim().ToLower()).Distinct())
+        foreach (var id in userIds.Distinct())
         {
-            if (string.IsNullOrEmpty(id))
-                continue;
             try
             {
                 var user = await _userRepo.GetById(id);
-                if (user != null)
-                    userList.Add(user);
+                if (user != null) userList.Add(user);
             }
             catch (Exception ex)
             {
-                _log.Warn($"Failed to get {nameof(UserModel)} with Id {id}\n{ex}");
+                _log.Warn(ex, $"Failed to get {nameof(UserModel)} with Id {id}");
             }
         }
         if (userList.Count < 1)
@@ -235,59 +208,28 @@ public class GroupService : BaseService
     /// </remarks>
     public async Task AddManyUsersAsync(GroupModel group, IEnumerable<UserModel> users)
     {
-        var userList = users.ToList();
-        // var session = await _mongoClient.StartSessionAsync();
-        // session.StartTransaction();
-        string? currentUserId = null;
-        var documentsAdded = new List<GroupUserAssociationModel>();
-        async Task Revert()
-        {
-            _log.Debug($"Reverting documents added due to an exception");
-            foreach (var item in documentsAdded)
-            {
-                try
-                {
-                    await _groupUserAssocRepo.Delete(item.Id);
-                }
-                catch (Exception ex)
-                {
-                    _log.Error($"Failed to revert {nameof(GroupUserAssociationModel)} with Id {item.Id}\n{ex}");
-                }
-            }
-        }
+        await using var ctx = _db.CreateSession();
+        await using var trans = await ctx.Database.BeginTransactionAsync();
         try
         {
-            foreach (var user in userList)
+
+            await ctx.GroupMemberships.AddRangeAsync(users.Select(user => new GroupMembershipModel
             {
-                currentUserId = user.Id;
+                GroupId = group.Id,
+                UserId = user.Id
+            }));
+            
 
-                var exists = await _groupUserAssocRepo.ExistsByGroupAndUser(group, user);
-                if (exists)
-                    continue;
-
-                var model = new GroupUserAssociationModel()
-                {
-                    UserId = user.Id,
-                    GroupId = group.Id,
-                    IsDeleted = false
-                };
-                await _groupUserAssocRepo.InsertOrUpdate(model);
-            }
+            await ctx.SaveChangesAsync();
+            await trans.CommitAsync();
         }
         catch (Exception ex)
         {
-            // await session.AbortTransactionAsync();
-            // session.Dispose();
-            await Revert();
-
-            _log.Error($"Failed to add many users into group {group.FormatName()}\n" +
-                       $"groupId: {group.Id}\n" +
-                       "users: " + string.Join(", ", userList.Select(v => v.Id)) + $"\n{ex}");
+            await trans.RollbackAsync();
             SentrySdk.CaptureException(ex, (scope) =>
             {
-                scope.SetExtra($"param.{nameof(users)}.Id", userList.Select(v => v.Id).ToArray());
+                scope.SetExtra($"param.{nameof(users)}.Id", users.Select(v => v.Id).ToArray());
                 scope.SetExtra($"param.{nameof(group)}.Id", group.Id);
-                scope.SetExtra($"currentUserId", currentUserId);
             });
             throw;
         }
@@ -303,34 +245,25 @@ public class GroupService : BaseService
     /// <remarks>
     /// Fetches the <see cref="GroupModel"/> and <see cref="UserModel"/>, then calls <see cref="RemoveUserAsync(GroupModel, UserModel)"/>
     /// </remarks>
-    public async Task RemoveUserAsync(string groupId, string userId)
+    public async Task RemoveUserAsync(Guid groupId, Guid userId)
     {
-        if (string.IsNullOrEmpty(groupId))
-        {
-            throw new ArgumentException($"Must not be null or empty", nameof(groupId));
-        }
-        if (string.IsNullOrEmpty(userId))
-        {
-            throw new ArgumentException($"Must not be null or empty", nameof(userId));
-        }
-
         var groupModel = await _groupRepo.GetById(groupId);
         var userModel = await _userRepo.GetById(userId);
 
         if (groupModel == null || userModel == null)
         {
-            throw new AggregateException([
-                new ArgumentException($"Could not find {nameof(GroupModel)} with Id {groupId}"),
-                new ArgumentException($"Could not find {nameof(UserModel)} with Id {userId}")
-            ]);
+            throw new AggregateException(
+                new ArgumentException($"Could not find {nameof(GroupModel)} with Id {groupId}", nameof(groupId)),
+                new ArgumentException($"Could not find {nameof(UserModel)} with Id {userId}", nameof(userId))
+            );
         }
         if (groupModel == null)
         {
-            throw new ArgumentException($"Could not find {nameof(GroupModel)} with Id {groupId}");
+            throw new ArgumentException($"Could not find {nameof(GroupModel)} with Id {groupId}", nameof(groupId));
         }
         if (userModel == null)
         {
-            throw new ArgumentException($"Could not find {nameof(UserModel)} with Id {userId}");
+            throw new ArgumentException($"Could not find {nameof(UserModel)} with Id {userId}", nameof(userId));
         }
 
         await RemoveUserAsync(groupModel, userModel);
@@ -350,35 +283,32 @@ public class GroupService : BaseService
         if (!associationExists)
             return;
 
-        var session = await _mongoClient.StartSessionAsync();
-        session.StartTransaction();
+        await using var ctx = _db.CreateSession();
+        await using var trans = await ctx.Database.BeginTransactionAsync();
         try
         {
-            var existing = await _groupUserAssocRepo.GetAllWithGroupAndUser(group, user, true);
-            // Update models when records exist where IsDeleted is false
-            // OR insert a model, when no records exist.
-            if (existing.Any(v => v.IsDeleted == false))
-            {
-                var targetIds = existing.Where(v => v.IsDeleted == false).Select(v => v.Id).ToArray();
-                await _groupUserAssocRepo.SetDeleteState(true, targetIds);
-            }
-            await session.CommitTransactionAsync();
+            await ctx.GroupMemberships
+                .Where(e
+                    => e.GroupId == group.Id
+                    && e.UserId == user.Id
+                    && !e.IsDeleted)
+                .ExecuteUpdateAsync(e => e
+                    .SetProperty(p => p.IsDeleted, true));
+            await ctx.SaveChangesAsync();
+            await trans.CommitAsync();
         }
         catch (Exception ex)
         {
-            await session.AbortTransactionAsync();
-            session.Dispose();
-            _log.Error($"Failed to remove user {user.FormatName()} from group {group.FormatName()} (userId: {user.Id}, groupId: {group.Id})\n{ex}");
+            await trans.RollbackAsync();
             SentrySdk.CaptureException(ex, (scope) =>
             {
                 scope.SetExtra("group", group);
                 scope.SetExtra("user", user);
-                scope.SetTag("param.group.Id", group.Id);
-                scope.SetTag("param.user.Id", user.Id);
+                scope.SetTag("param.group.Id", group.Id.ToString());
+                scope.SetTag("param.user.Id", user.Id.ToString());
             });
             throw;
         }
-        session.Dispose();
     }
     #endregion
 
@@ -392,6 +322,10 @@ public class GroupService : BaseService
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<UserModel>? AffectedUsers { get; set; }
     }
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        WriteIndented = true,
+    };
     public async Task<DeleteGroupResult> DeleteGroupAsync(GroupModel group)
     {
         // var session = await _mongoClient.StartSessionAsync();
@@ -411,7 +345,7 @@ public class GroupService : BaseService
                     }
                     catch (Exception ex)
                     {
-                        _log.Warn($"Revert|Failed to re-insert {nameof(GroupModel)}\n{JsonSerializer.Serialize(result.Group, SerializerOptions)}\n{ex}");
+                        _log.Warn(ex, $"Revert|Failed to re-insert {nameof(GroupModel)}\n{JsonSerializer.Serialize(result.Group, SerializerOptions)}");
                     }
                 }
             }
@@ -419,7 +353,7 @@ public class GroupService : BaseService
             {
                 foreach (var usr in result.AffectedUsers)
                 {
-                    var model = new GroupUserAssociationModel()
+                    var model = new GroupMembershipModel
                     {
                         UserId = usr.Id,
                         GroupId = group.Id,
@@ -431,7 +365,7 @@ public class GroupService : BaseService
                     }
                     catch (Exception ex)
                     {
-                        _log.Warn($"Revert|Failed to re-insert {nameof(GroupUserAssociationModel)}\n{JsonSerializer.Serialize(model, SerializerOptions)}\n{ex}");
+                        _log.Warn(ex, $"Revert|Failed to re-insert {nameof(GroupMembershipModel)}\n{JsonSerializer.Serialize(model, SerializerOptions)}");
                     }
                 }
             }
@@ -445,7 +379,7 @@ public class GroupService : BaseService
                     }
                     catch (Exception ex)
                     {
-                        _log.Warn($"Revert|Failed to re-insert {nameof(GroupPermissionGlobalModel)}\n{JsonSerializer.Serialize(glb, SerializerOptions)}\n{ex}");
+                        _log.Warn(ex, $"Revert|Failed to re-insert {nameof(GroupPermissionGlobalModel)}\n{JsonSerializer.Serialize(glb, SerializerOptions)}");
                     }
                 }
             }
@@ -459,7 +393,7 @@ public class GroupService : BaseService
                     }
                     catch (Exception ex)
                     {
-                        _log.Warn($"Revert|Failed to re-insert {nameof(GroupPermissionApplicationModel)}\n{JsonSerializer.Serialize(app, SerializerOptions)}\n{ex}");
+                        _log.Warn(ex, $"Revert|Failed to re-insert {nameof(GroupPermissionApplicationModel)}\n{JsonSerializer.Serialize(app, SerializerOptions)}");
                     }
                 }
             }
@@ -473,56 +407,48 @@ public class GroupService : BaseService
                     }
                     catch (Exception ex)
                     {
-                        _log.Warn($"Revert|Failed to recalculate user permissions for {usr.FormatName()} ({usr.Id})\n{ex}");
+                        _log.Warn(ex, $"Revert|Failed to recalculate user permissions for {usr} ({usr.Id})");
                     }
                 }
             }
         }
+
+        await using var ctx = _db.CreateSession();
+        await using var trans = await ctx.Database.BeginTransactionAsync();
         try
         {
-            await _groupRepo.Delete(group.Id);
+            result.AffectedUsers = await ctx.GroupMemberships.Where(e => e.GroupId == group.Id && !e.IsDeleted).Select(e => e.User).AsNoTracking().ToListAsync();
 
-            var userAssociations = await _groupUserAssocRepo.HardDeleteByGroupId(group.Id);
-            result.AffectedUsers = [];
-            foreach (var x in userAssociations.DistinctBy(v => v.UserId))
-            {
-                try
-                {
-                    var user = await _userRepo.GetById(x.UserId);
-                    if (user != null)
-                    {
-                        result.AffectedUsers.Add(user);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _log.Warn($"Failed to get user with Id {x.UserId}\n{ex}");
-                }
-            }
+            result.GlobalPermissions = await ctx.GroupGlobalPermissions.AsNoTracking()
+                .Where(e => e.GroupId == group.Id)
+                .ToListAsync();
+            result.ApplicationPermissions = await ctx.GroupApplicationPermissions.AsNoTracking()
+                .Where(e => e.GroupId == group.Id)
+                .ToListAsync();
 
-            result.GlobalPermissions = await _groupPermGlobalRepo.GetManyByGroup(group.Id);
-            await _groupPermGlobalRepo.Delete(result.GlobalPermissions.Select(v => v.Id).ToArray());
+            await ctx.GroupGlobalPermissions.Where(e => e.GroupId == group.Id).ExecuteDeleteAsync();
+            await ctx.GroupApplicationPermissions.Where(e => e.GroupId == group.Id).ExecuteDeleteAsync();
+            await ctx.GroupMemberships.Where(e => e.GroupId == group.Id).ExecuteDeleteAsync();
+            await ctx.Groups.Where(e => e.Id == group.Id).ExecuteDeleteAsync();
 
-            result.ApplicationPermissions = await _groupPermAppRepo.GetManyByGroup(group.Id);
-            await _groupPermAppRepo.Delete(result.ApplicationPermissions.Select(v => v.Id).ToArray());
-
-            _log.Debug($"Recalculating permissions for {result.AffectedUsers.Count} users.");
-            foreach (var user in result.AffectedUsers)
-            {
-                await _permissionCacheService.CalculateUser(user.Id);
-            }
+            await ctx.SaveChangesAsync();
+            await trans.CommitAsync();
         }
         catch (Exception ex)
         {
-            await Revert();
-            _log.Error($"Failed to delete group {group.FormatName()} (groupId: {group.Id})\n{ex}");
+            await trans.RollbackAsync();
             SentrySdk.CaptureException(ex, (scope) =>
             {
-                scope.SetTag($"param.{nameof(group)}.Id", group.Id);
+                scope.SetExtra($"param.{nameof(group)}.Id", group.Id.ToString());
             });
             throw;
         }
-        // session.Dispose();
+
+        _log.Debug($"Recalculating permissions for {result.AffectedUsers.Count} users.");
+        foreach (var user in result.AffectedUsers)
+        {
+            await _permissionCacheService.CalculateUser(user.Id);
+        }
         return result;
     }
 }

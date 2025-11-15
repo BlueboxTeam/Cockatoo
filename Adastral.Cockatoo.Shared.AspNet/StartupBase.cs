@@ -1,5 +1,6 @@
-﻿using Adastral.Cockatoo.DataAccess;
-using Adastral.Cockatoo.Shared.AspNet;
+﻿using Adastral.Cockatoo.Common.AspNet.Jobs;
+using Adastral.Cockatoo.DataAccess;
+using FluentScheduler;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
@@ -9,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NLog;
 
-namespace Adastral.Cockatoo.Services;
+namespace Adastral.Cockatoo.Common.AspNet;
 
 public class StartupBase
 {
@@ -20,10 +21,19 @@ public class StartupBase
     {
         Configuration = configuration;
         WebHostEnvironment = env;
+
+        JobManager.Initialize();
     }
 
     public IServiceScope? DefaultScope { get; private set; }
     public IServiceProvider? Services => DefaultScope?.ServiceProvider;
+
+    protected virtual ApplicationInfo GetApplicationInfo()
+    {
+        throw new NotImplementedException();
+    }
+
+    protected virtual bool IncludeReloadConfigurationJob() => true;
 
     public virtual void Configure(IApplicationBuilder app, IWebHostEnvironment env)
     {
@@ -39,11 +49,20 @@ public class StartupBase
             app.UseExceptionHandler("/Error");
             var context = Services!.GetRequiredService<ApplicationDbContext>();
             var migrations = context.Database.GetPendingMigrations().ToList();
-            if (migrations.Any())
+            if (migrations.Count > 0)
             {
                 var logger = LogManager.GetCurrentClassLogger();
-                logger.Info("Applying the following migrations:" + Environment.NewLine + string.Join(Environment.NewLine, migrations.Select(e => "- " + e)));
-                context.Database.Migrate();
+                logger.Info("Applying the following migrations:\n{Migrations}",
+                    string.Join(Environment.NewLine, migrations.Select(e => "- " + e)));
+                try
+                {
+                    context.Database.Migrate();
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, "Failed to apply one or more database migrations!");
+                    throw new DatabaseMigrationFailureException(migrations, ex);
+                }
             }
         }
 
@@ -85,18 +104,39 @@ public class StartupBase
 
     public virtual void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton<IApplicationInfo>(GetApplicationInfo());
+        services.AddHostedService<JobManagerHostedService>();
+        if (IncludeReloadConfigurationJob())
+        {
+            services.AddHostedService<ReloadConfigurationJob>();
+        }
+
         StartupGlue.ResponseCompression(services);
         StartupGlue.ForwardedHeadersOptions(services);
-        StartupGlue.Database(services, new());
+        StartupGlue.Database(services, GetDatabaseServicesOptions());
         StartupGlue.Cache(services);
         StartupGlue.Authentication(services);
-        services.AddMvc();
+        ConfigureMvc(services.AddMvc());
+        ConfigureDataProtection(services.AddDataProtection(SetupDataProtectionOptions).PersistKeysToDbContext<ApplicationDbContext>());
         services.AddEndpointsApiExplorer();
+        services.AddHttpContextAccessor();
         /*services.AddControllersWithViews(options =>
         {
             options.Filters.Add(new BlockUserRegisterAttribute());
         });*/
-        services.AddHttpContextAccessor();
-        services.AddDataProtection().PersistKeysToDbContext<ApplicationDbContext>();
+    }
+
+    protected virtual void ConfigureMvc(IMvcBuilder builder)
+    {
+    }
+    protected virtual void ConfigureDataProtection(IDataProtectionBuilder builder)
+    {
+    }
+    protected virtual StartupGlue.DatabaseServicesOptions GetDatabaseServicesOptions()
+    {
+        return new();
+    }
+    protected virtual void SetupDataProtectionOptions(DataProtectionOptions options)
+    {
     }
 }

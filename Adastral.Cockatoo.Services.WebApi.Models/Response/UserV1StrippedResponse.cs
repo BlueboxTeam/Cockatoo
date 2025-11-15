@@ -9,15 +9,15 @@ public class UserV1StrippedResponse
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string Type => GetType().Name;
     [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
-    [JsonPropertyName("displayName")]
-    public string DisplayName { get; set; } = "";
+    public Guid Id { get; set; }
+    [JsonPropertyName("username")]
+    public string? Username { get; set; }
     [JsonPropertyName("createdAt")]
     public long CreatedAt { get; set; } = 0;
     public void FromModel(UserModel model)
     {
         Id = model.Id;
-        DisplayName = model.DisplayName;
-        CreatedAt = model.GetCreatedAtTimestamp();
+        Username = model.UserName;
+        // CreatedAt = model.At
     }
 }

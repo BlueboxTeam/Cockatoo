@@ -1,21 +1,16 @@
 ﻿using Adastral.Cockatoo.Common;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Bson.Serialization.Attributes;
 using NLog;
-using System.ComponentModel;
 using System.Data;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Xml.Serialization;
-using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Adastral.Cockatoo.Services.WebApi.Models.Request;
 using Adastral.Cockatoo.Services.WebApi.Models.Response;
+using Adastral.Cockatoo.DataAccess;
 
 namespace Adastral.Cockatoo.Services;
 
-[CockatooDependency]
 public class BullseyeService : BaseService
 {
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
@@ -28,6 +23,7 @@ public class BullseyeService : BaseService
     private readonly ApplicationRepository _appDetailRepo;
     private readonly StorageFileRepository _storageFileRepo;
     private readonly StorageService _storageService;
+    private readonly ApplicationDbContext _db;
     public BullseyeService(IServiceProvider services)
         : base(services)
     {
@@ -40,6 +36,7 @@ public class BullseyeService : BaseService
         _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
         _storageFileRepo = services.GetRequiredService<StorageFileRepository>();
         _storageService = services.GetRequiredService<StorageService>();
+        _db = services.GetRequiredService<ApplicationDbContext>();
     }
     
     public async Task<List<ApplicationModel>> GetAllApps()
@@ -243,7 +240,7 @@ public class BullseyeService : BaseService
     /// <param name="appId">Bullseye Application Id (<see cref="BullseyeAppModel.ApplicationDetailModelId"/>)</param>
     /// <param name="deleteResources"><inheritdoc cref="ManageBullseyeV1DeleteRequest.DeleteStorageResources" path="/summary"/></param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="appId"/> is null or empty.</exception>
-    public Task<ManageBullseyeV1DeleteResponse> DeleteBullseyeApp(Guid appId, bool deleteResources)
+    public Task<ManageBullseyeV1DeleteResponse> DeleteBullseyeApp(Guid appId, bool deleteResources, bool createTransaction = true)
     {
         if (appId == Guid.Empty)
         {
@@ -253,14 +250,9 @@ public class BullseyeService : BaseService
         {
             AppId = appId,
             IncludeResources = deleteResources
-        });
+        }, createTransaction: createTransaction);
     }
-    /// <summary>
-    /// Delete a Bullseye App and it's resources (when <see cref="ManageBullseyeV1DeleteRequest.IncludeResources"/> is <see langword="true"/>)
-    /// </summary>
-    /// <param name="req">Request Options.</param>
-    /// <exception cref="ArgumentException">Thrown when <see cref="ManageBullseyeV1DeleteRequest.AppId"/> is null or empty.</exception>
-    public async Task<ManageBullseyeV1DeleteResponse> DeleteBullseyeApp(ManageBullseyeV1DeleteRequest req)
+    private async Task<ManageBullseyeV1DeleteResponse> DeleteBullseyeAppInternal(ManageBullseyeV1DeleteRequest req)
     {
         if (req.AppId == Guid.Empty)
         {
@@ -409,6 +401,31 @@ public class BullseyeService : BaseService
 
         return response;
     }
+    /// <summary>
+    /// Delete a Bullseye App and it's resources (when <see cref="ManageBullseyeV1DeleteRequest.IncludeResources"/> is <see langword="true"/>)
+    /// </summary>
+    /// <param name="req">Request Options.</param>
+    /// <exception cref="ArgumentException">Thrown when <see cref="ManageBullseyeV1DeleteRequest.AppId"/> is null or empty.</exception>
+    public async Task<ManageBullseyeV1DeleteResponse> DeleteBullseyeApp(ManageBullseyeV1DeleteRequest req, bool createTransaction = true)
+    {
+        if (!createTransaction)
+        {
+            return await DeleteBullseyeAppInternal(req);
+        }
+        await using var trans = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var result = await DeleteBullseyeAppInternal(req);
+            await _db.SaveChangesAsync();
+            await trans.CommitAsync();
+            return result;
+        }
+        catch
+        {
+            await trans.RollbackAsync();
+            throw;
+        }
+    }
 
     public async Task<ManageBullseyeV1DeleteRevisionResponse> DeleteBullseyeRevision(Guid revisionId)
     {
@@ -471,7 +488,7 @@ public class BullseyeService : BaseService
             }
             catch (Exception ex)
             {
-                _log.Error($"{nameof(revisionId)}={revisionId}|delete={nameof(revisionModel.ArchiveStorageFileId)}|{ex}");
+                _log.Error(ex, $"{nameof(revisionId)}={revisionId}|delete={nameof(revisionModel.ArchiveStorageFileId)} {revisionModel.ArchiveStorageFileId}");
             }
         }
         if (revisionModel.PeerToPeerStorageFileId.HasValue)
@@ -486,7 +503,7 @@ public class BullseyeService : BaseService
             }
             catch (Exception ex)
             {
-                _log.Error($"{nameof(revisionId)}={revisionId}|delete={nameof(revisionModel.PeerToPeerStorageFileId)}|{ex}");
+                _log.Error(ex, $"{nameof(revisionId)}={revisionId}|delete={nameof(revisionModel.PeerToPeerStorageFileId)} {revisionModel.PeerToPeerStorageFileId}");
             }
         }
         if (revisionModel.SignatureStorageFileId.HasValue)

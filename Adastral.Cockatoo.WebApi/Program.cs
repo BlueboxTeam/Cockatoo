@@ -1,44 +1,40 @@
 using Adastral.Cockatoo.Common;
-using Adastral.Cockatoo.Common.Helpers;
-using Adastral.Cockatoo.DataAccess;
-using Adastral.Cockatoo.Services;
-using Adastral.Cockatoo.Services.WebApi;
-using Adastral.Cockatoo.Services.WebApi.Controllers;
-using Adastral.Cockatoo.Services.WebApi.Models;
-using Adastral.Cockatoo.Shared.AspNet;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Adastral.Cockatoo.Common.AspNet;
+using Adastral.Cockatoo.WebApi;
 using Microsoft.IdentityModel.Logging;
-using Microsoft.OpenApi.Models;
-using NLog;
-using NLog.Extensions.Logging;
 using NLog.Web;
-using System.Data;
-using Logger = NLog.Logger;
-using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
+if (args.FirstOrDefault()?.Trim().Equals("docker", StringComparison.OrdinalIgnoreCase) ?? false)
+{
+    Environment.SetEnvironmentVariable(FeatureFlags.RunningInDockerName, "true");
+}
+if (FeatureFlags.IsDevelopmentEnvironment)
+{
+    IdentityModelEventSource.ShowPII = true;
+    IdentityModelEventSource.LogCompleteSecurityArtifact = true;
+}
+
+StartupGlue.InitializeNLog();
+StartupGlue.CheckConfiguration();
+await RunServer(args);
+
+static async Task RunServer(string[] args)
+{
+    var h = Host.CreateDefaultBuilder(args)
+        .UseNLog().ConfigureWebHostDefaults(webBuilder =>
+        {
+            webBuilder.UseStartup<Startup>();
+            StartupGlue.ApplyWebHostBuilder(webBuilder);
+        });
+    await h.RunConsoleAsync();
+}
+/*
 namespace Adastral.Cockatoo.WebApi;
 
 public static class Program
 {
-    /*private static readonly Logger _log = LogManager.GetCurrentClassLogger();
-    public static string Version => typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";*/
     public static void Main(string[] args)
     {
-        if (args.FirstOrDefault()?.Trim().Equals("docker", StringComparison.OrdinalIgnoreCase) ?? false)
-        {
-            Environment.SetEnvironmentVariable(FeatureFlags.RunningInDockerName, "true");
-        }
-        if (FeatureFlags.IsDevelopmentEnvironment || FeatureFlags.ShowPrivateInformationWithAspNet)
-        {
-            IdentityModelEventSource.ShowPII = true;
-            IdentityModelEventSource.LogCompleteSecurityArtifact = true;
-        }
-
-        StartupGlue.InitializeNLog();
-        StartupGlue.CheckConfiguration();
         RunServer(ref args);
     }
 
@@ -52,7 +48,10 @@ public static class Program
             });
         h.RunConsoleAsync().Wait();
     }
-    /*private static WebApplication? WebApp = null;
+    private static readonly Logger _log = LogManager.GetCurrentClassLogger();
+    public static string Version => typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+
+    private static WebApplication? WebApp = null;
     private static WebApplicationBuilder? WebAppBuilder = null;
 
     private static void InitializeWebApplication(CoreContext core, string[] args)

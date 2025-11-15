@@ -8,8 +8,10 @@ public class BlogPostV1TagResponse
     [JsonPropertyName("_type")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string Type => GetType().Name;
+
     [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
+    public Guid Id { get; set; }
+
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
 

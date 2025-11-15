@@ -1,24 +1,26 @@
-using System.Buffers;
-using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using Adastral.Cockatoo.Common;
+using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Adastral.Cockatoo.DataAccess.Repositories.Group;
-using kate.shared.Helpers;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Bson;
 using NLog;
+using Sentry.Protocol;
+using System.Buffers;
+using System.Reflection;
+using System.Text.Json;
 
 namespace Adastral.Cockatoo.Services;
 
-[CockatooDependency]
-public class PermissionCacheService : BaseService
+public class PermissionCacheService
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        WriteIndented = true,
+        ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve
+    };
+
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
     private readonly UserRepository _userRepo;
     private readonly GroupRepository _groupRepo;
@@ -27,12 +29,12 @@ public class PermissionCacheService : BaseService
     private readonly GroupUserAssociationRepository _groupUserAssocRepo;
 
     private readonly ApplicationRepository _appRepo;
-    private readonly UserPermissionGlobalCacheRepository _userPermGlobalCacheRepo;
-    private readonly UserPermissionApplicationCacheRepository _userPermAppCacheRepo;
+    private readonly UserGlobalPermissionCacheRepository _userGlobalPermissionCache;
+    private readonly UserApplicationPermissionCacheRepository _userApplicationPermissionCache;
+    private readonly ApplicationDbContext _db;
     private readonly IDistributedCache _distCache;
 
     public PermissionCacheService(IServiceProvider services)
-        : base(services)
     {
         _userRepo = services.GetRequiredService<UserRepository>();
 
@@ -41,9 +43,10 @@ public class PermissionCacheService : BaseService
         _groupPermAppRepo = services.GetRequiredService<GroupPermissionApplicationRepository>();
         _groupUserAssocRepo = services.GetRequiredService<GroupUserAssociationRepository>();
 
-        _userPermGlobalCacheRepo = services.GetRequiredService<UserPermissionGlobalCacheRepository>();
-        _userPermAppCacheRepo = services.GetRequiredService<UserPermissionApplicationCacheRepository>();
+        _userGlobalPermissionCache = services.GetRequiredService<UserGlobalPermissionCacheRepository>();
+        _userApplicationPermissionCache = services.GetRequiredService<UserApplicationPermissionCacheRepository>();
         _appRepo = services.GetRequiredService<ApplicationRepository>();
+        _db = services.GetRequiredService<ApplicationDbContext>();
         _distCache = services.GetRequiredService<IDistributedCache>();
     }
 
@@ -51,7 +54,8 @@ public class PermissionCacheService : BaseService
     {
         return GetInheritedPermissionsInternal(kind, 0, []);
     }
-    private static List<PermissionKind> GetInheritedPermissionsInternal(PermissionKind kind,
+    private static List<PermissionKind> GetInheritedPermissionsInternal(
+        PermissionKind kind,
         uint depth,
         List<PermissionKind> permissionStack)
     {
@@ -86,13 +90,13 @@ public class PermissionCacheService : BaseService
     /// </summary>
     /// <param name="userId">Id of <see cref="UserModel"/></param>
     /// <returns>List of permissions the user has.</returns>
-    public async Task<List<PermissionKind>> GetUser(Guid userId)
+    public async Task<ICollection<PermissionKind>> GetUser(Guid userId)
     {
         var stringContent = await _distCache.GetStringAsync(GetGlobalUserKey(userId));
         if (string.IsNullOrEmpty(stringContent))
         {
             var res = await CalculateUser(userId);
-            return res.GlobalCache.Permissions;
+            return res.GlobalCache;
         }
         else
         {
@@ -106,7 +110,7 @@ public class PermissionCacheService : BaseService
     /// <param name="userId">Id of <see cref="UserModel"/></param>
     /// <param name="applicationId">Id of <see cref="ApplicationDetailModel"/></param>
     /// <returns>List of application permissions this user has for the specified application.</returns>
-    public async Task<List<ScopedApplicationPermissionKind>> GetUserByApplication(Guid userId, Guid applicationId)
+    public async Task<ICollection<ScopedApplicationPermissionKind>> GetUserByApplication(Guid userId, Guid applicationId)
     {
         var userPermissions = await GetUser(userId);
 
@@ -118,9 +122,9 @@ public class PermissionCacheService : BaseService
             {
                 if (userPermissions.Contains(PermissionKind.Superuser))
                 {
-                    return item.Permissions.Concat([ScopedApplicationPermissionKind.Admin]).Distinct().ToList();
+                    return item.Concat([ScopedApplicationPermissionKind.Admin]).Distinct().ToList();
                 }
-                return item.Permissions;
+                return item;
             }
             else
             {
@@ -147,8 +151,8 @@ public class PermissionCacheService : BaseService
     /// </summary>
     public class RecalculateUserResult
     {
-        public required UserPermissionGlobalCacheModel GlobalCache { get; set; }
-        public Dictionary<Guid, UserPermissionApplicationCacheModel> ApplicationCache { get; set; } = [];
+        public required ICollection<PermissionKind> GlobalCache { get; set; }
+        public Dictionary<Guid, ICollection<ScopedApplicationPermissionKind>> ApplicationCache { get; set; } = [];
     }
 
     /// <summary>
@@ -165,9 +169,9 @@ public class PermissionCacheService : BaseService
         {
             applicationPermissions[app.Id] = [];
         }
-        foreach (var group in groups.OrderByDescending(v => v.Priority))
+        foreach (var groupId in groups.OrderByDescending(v => v.Priority).Select(e => e.Id))
         {
-            var groupGlobalPermissions = await _groupPermGlobalRepo.GetManyByGroup(group.Id);
+            var groupGlobalPermissions = await _groupPermGlobalRepo.GetManyByGroup(groupId);
             foreach (var item in groupGlobalPermissions)
             {
                 foreach (var k in GetInheritedPermissions(item.Kind))
@@ -177,54 +181,73 @@ public class PermissionCacheService : BaseService
                 globalPermissions[item.Kind] = item.Allow;
             }
 
-            var groupApplicationPermissions = await _groupPermAppRepo.GetManyByGroup(group.Id);
+            var groupApplicationPermissions = await _groupPermAppRepo.GetManyByGroup(groupId);
             // do stuff that has an ApplicationId first, then override stuff when it's not set.
-            foreach (var item in groupApplicationPermissions.OrderBy(v => string.IsNullOrEmpty(v.ApplicationId) ? 1 : 0))
+            foreach (var item in groupApplicationPermissions.OrderBy(v => !v.ApplicationId.HasValue ? 1 : 0))
             {
-                if (string.IsNullOrEmpty(item.ApplicationId))
+                if (item.ApplicationId.HasValue)
+                {
+                    if (!applicationPermissions.ContainsKey(item.ApplicationId.Value))
+                    {
+                        applicationPermissions[item.ApplicationId.Value] = [];
+                    }
+
+                    applicationPermissions[item.ApplicationId.Value][item.Kind] = item.Allow;
+                }
+                else
                 {
                     foreach (var i in applicationPermissions)
                     {
                         applicationPermissions[i.Key][item.Kind] = item.Allow;
                     }
                 }
-                else
-                {
-                    if (!applicationPermissions.ContainsKey(item.ApplicationId))
-                    {
-                        applicationPermissions[item.ApplicationId] = [];
-                    }
-
-                    applicationPermissions[item.ApplicationId][item.Kind] = item.Allow;
-                }
             }
         }
 
-        var globalCacheModel = new UserPermissionGlobalCacheModel()
-        {
-            UserId = userId,
-            Permissions = globalPermissions.Where(v => v.Value).Select(v => v.Key).ToList()
-        };
-        await _userPermGlobalCacheRepo.InsertOrUpdate(globalCacheModel);
-        await _distCache.SetStringAsync(GetGlobalUserKey(userId), JsonSerializer.Serialize(globalCacheModel.Permissions, SerializerOptions));
-        var result = new RecalculateUserResult()
-        {
-            GlobalCache = globalCacheModel
-        };
-        foreach (var (appId, data) in applicationPermissions)
-        {
-            var appCacheModel = new UserPermissionApplicationCacheModel()
+        await _userGlobalPermissionCache.Set(globalPermissions.Where(e => e.Value)
+            .Select(e => new UserGlobalPermissionCacheModel
             {
                 UserId = userId,
-                ApplicationId = appId,
-                Permissions = data.Where(v => v.Value).Select(v => v.Key).ToList()
-            };
-            await _userPermAppCacheRepo.InsertOrUpdate(appCacheModel);
-            await _distCache.SetStringAsync(GetApplicationUserKey(userId, appId), JsonSerializer.Serialize(appCacheModel.Permissions, SerializerOptions));
-            result.ApplicationCache[appId] = appCacheModel;
-        }
+                Permission = e.Key
+            }));
+        var result = new RecalculateUserResult()
+        {
+            GlobalCache = await _db.UserGlobalPermissionCache.AsNoTracking()
+                .Where(e => e.UserId == userId)
+                .Select(e => e.Permission)
+                .ToListAsync()
+        };
+        await SetCacheAsync(GetGlobalUserKey(userId), result.GlobalCache);
+
+        await Task.WhenAll(applicationPermissions.Select(SetApplicationPermissionCache));
         return result;
+
+        async Task SetApplicationPermissionCache(KeyValuePair<Guid, Dictionary<ScopedApplicationPermissionKind, bool>> pair)
+        {
+            await _userApplicationPermissionCache.Set(pair.Value
+                .Where(e => e.Value)
+                .Select(e => new UserApplicationPermissionCacheModel
+                {
+                    UserId = userId,
+                    ApplicationId = pair.Key,
+                    Permission = e.Key
+                }));
+            var records = await _userApplicationPermissionCache.GetPermissionsForUserAndApp(userId, pair.Key);
+            lock (result.ApplicationCache)
+            {
+                result.ApplicationCache[pair.Key] = records;
+            }
+            await SetCacheAsync(GetApplicationUserKey(userId, pair.Key), records);
+        }
     }
+
+    private async Task SetCacheAsync<TValue>(string key, TValue value)
+        where TValue : notnull
+    {
+        var json = JsonSerializer.Serialize(value, SerializerOptions);
+        await _distCache.SetStringAsync(key, json);
+    }
+
     /// <summary>
     /// Calculate permissions for the <paramref name="groupId"/> provided.
     /// </summary>
@@ -260,17 +283,18 @@ public class PermissionCacheService : BaseService
         }
     }
 
-    private string GetGlobalUserKey(Guid userId)
+    private static string GetGlobalUserKey(Guid userId)
     {
         return $"{nameof(PermissionCacheService)},global,{nameof(userId)}={userId}";
     }
 
-    private string GetApplicationUserKey(Guid userId, Guid appId)
+    private static string GetApplicationUserKey(Guid userId, Guid appId)
     {
         return $"{nameof(PermissionCacheService)},application,{nameof(userId)}={userId},{nameof(appId)}={appId}";
     }
 
-    public override async Task InitializeAsync()
+    // TODO convert method into hosted service
+    /*public override async Task InitializeAsync()
     {
         await base.InitializeAsync();
         _log.Debug($"Calculating permissons for all users.");
@@ -285,5 +309,5 @@ public class PermissionCacheService : BaseService
                 _log.Error(ex, $"Could not calculate permissions for user {user.Id}");
             }
         }
-    }
+    }*/
 }

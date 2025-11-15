@@ -1,4 +1,5 @@
-﻿using Adastral.Cockatoo.DataAccess.Models;
+﻿using Adastral.Cockatoo.DataAccess;
+using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.Services.WebApi.Models.Request;
 
 namespace Adastral.Cockatoo.Services.WebApi.Models.Response;

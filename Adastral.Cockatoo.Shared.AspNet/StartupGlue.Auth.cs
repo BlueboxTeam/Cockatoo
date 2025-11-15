@@ -1,12 +1,10 @@
-
-using Adastral.Cockatoo.Common;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
-namespace Adastral.Cockatoo.Shared.AspNet;
+namespace Adastral.Cockatoo.Common.AspNet;
 
 partial class StartupGlue
 {
@@ -55,7 +53,7 @@ partial class StartupGlue
                                 break;
                         }
                     }
-                    if (item.ValidateIssuer == false)
+                    if (!item.ValidateIssuer)
                     {
                         options.TokenValidationParameters.ValidateIssuerSigningKey = false;
                         options.TokenValidationParameters.SignatureValidator

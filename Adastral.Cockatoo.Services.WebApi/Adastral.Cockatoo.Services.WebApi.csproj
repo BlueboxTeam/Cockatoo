@@ -13,7 +13,6 @@
     <ItemGroup>
       <ProjectReference Include="..\Adastral.Cockatoo.Services.WebApi.Models\Adastral.Cockatoo.Services.WebApi.Models.csproj" />
       <ProjectReference Include="..\Adastral.Cockatoo.Services\Adastral.Cockatoo.Services.csproj" />
-      <ProjectReference Include="..\Adastral.Cockatoo.Services.Core\Adastral.Cockatoo.Services.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>

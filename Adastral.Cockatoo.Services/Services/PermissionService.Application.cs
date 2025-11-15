@@ -1,4 +1,6 @@
 using Adastral.Cockatoo.DataAccess.Models;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace Adastral.Cockatoo.Services;
 
@@ -75,7 +77,7 @@ public partial class PermissionService
     public async Task<bool> CheckApplicationPermission(
         Guid userId,
         Guid applicationId,
-        params ScopedApplicationPermissionKind[] permissions)
+        params IEnumerable<ScopedApplicationPermissionKind> permissions)
     {
         var kinds = permissions.Distinct().ToArray();
         var userPermissions = await _permissionCacheService.GetUserByApplication(userId, applicationId);
@@ -90,18 +92,18 @@ public partial class PermissionService
     public Task<bool> CheckApplicationPermission(
         UserModel user,
         ApplicationModel application,
-        params ScopedApplicationPermissionKind[] permissions)
+        params IEnumerable<ScopedApplicationPermissionKind> permissions)
         => CheckApplicationPermission(user.Id, application.Id, permissions);
     public Task<bool> CheckApplicationPermission(
         UserModel user,
         Guid applicationId,
-        params ScopedApplicationPermissionKind[] permissions)
+        params IEnumerable<ScopedApplicationPermissionKind> permissions)
         => CheckApplicationPermission(user.Id, applicationId, permissions);
 
     public async Task<bool> CheckApplicationPermission(
         Guid userId,
         Guid applicationId,
-        params PermissionKind[] permissions)
+        params IEnumerable<PermissionKind> permissions)
     {
         // Allow when user has any of those global permissions and/or they're a superuser
         bool check = await CheckGlobalPermission(
@@ -118,13 +120,13 @@ public partial class PermissionService
     public Task<bool> CheckApplicationPermission(
         UserModel user,
         ApplicationModel application,
-        params PermissionKind[] permissions)
+        params IEnumerable<PermissionKind> permissions)
     => CheckApplicationPermission(user.Id, application.Id, permissions);
 
     public Task<bool> CheckApplicationPermission(
         UserModel user,
         Guid applicationId,
-        params PermissionKind[] permissions)
+        params IEnumerable<PermissionKind> permissions)
         => CheckApplicationPermission(user.Id, applicationId, permissions);
     #endregion
     
@@ -132,48 +134,40 @@ public partial class PermissionService
     public async Task GrantManyApplicationForGroupAsync(
         Guid groupId,
         Guid applicationId,
-        params ScopedApplicationPermissionKind[] kinds)
+        params IEnumerable<ScopedApplicationPermissionKind> kinds)
     {
-        var session = await _mongoClient.StartSessionAsync();
-        session.StartTransaction();
+        await using var ctx = _db.CreateSession();
+        await using var trans = await ctx.Database.BeginTransactionAsync();
         try
         {
+            var existingPermissions = await ctx.GroupApplicationPermissions
+                .Where(e
+                    => e.GroupId == groupId
+                    && e.ApplicationId == applicationId
+                    && kinds.Contains(e.Kind))
+                .ToListAsync();
 
-            var existingToUpdate = await _groupPermissionAppRepo.GetManyBy(new()
+            await ctx.GroupApplicationPermissions
+                .Where(e
+                    => e.GroupId == groupId
+                    && e.ApplicationId == applicationId
+                    && kinds.Contains(e.Kind)
+                    && !e.Allow)
+                .ExecuteUpdateAsync(e => e
+                .SetProperty(p => p.Allow, true));
+
+            foreach (var kind in kinds.Where(e => !existingPermissions.Any(x => x.Kind == e)))
             {
-                GroupId = groupId,
-                ApplicationId = applicationId,
-                KindsIn = kinds,
-                Allow = false
-            });
-
-            foreach (var item in existingToUpdate)
-            {
-                item.Allow = true;
-                await _groupPermissionAppRepo.InsertOrUpdate(item);
-            }
-
-            var existing = await _groupPermissionAppRepo.GetManyBy(
-                new()
+                await ctx.GroupApplicationPermissions.AddAsync(new GroupPermissionApplicationModel
                 {
                     GroupId = groupId,
                     ApplicationId = applicationId,
-                    KindsIn = kinds,
-                });
-            var f = existing.Select(v => v.Kind).Distinct().ToArray();
-
-            foreach (var x in kinds.Where(v => f.Contains(v) == false))
-            {
-                await _groupPermissionAppRepo.InsertOrUpdate(new()
-                {
-                    GroupId = groupId,
-                    ApplicationId = applicationId,
-                    Kind = x,
+                    Kind = kind,
                     Allow = true
                 });
             }
-
-            await session.CommitTransactionAsync();
+            await ctx.SaveChangesAsync();
+            await trans.CommitAsync();
         }
         catch (Exception ex)
         {
@@ -183,7 +177,7 @@ public partial class PermissionService
                 scope.SetTag($"param.{nameof(applicationId)}", applicationId.ToString());
                 scope.SetTag($"param.{nameof(kinds)}", string.Join(", ", kinds.Select(v => v.ToString())));
             });
-            await session.AbortTransactionAsync();
+            await trans.RollbackAsync();
             throw;
         }
 
@@ -192,13 +186,13 @@ public partial class PermissionService
     public Task GrantManyApplicationForGroupAsync(
         GroupModel group,
         ApplicationModel application,
-        params ScopedApplicationPermissionKind[] kinds)
+        params IEnumerable<ScopedApplicationPermissionKind> kinds)
         => GrantManyApplicationForGroupAsync(group.Id, application.Id, kinds);
 
     public Task GrantManyApplicationForGroupAsync(
         GroupModel group,
         Guid applicationId,
-        params ScopedApplicationPermissionKind[] kinds) =>
+        params IEnumerable<ScopedApplicationPermissionKind> kinds) =>
         GrantManyApplicationForGroupAsync(group.Id, applicationId, kinds);
     #endregion
     
@@ -206,58 +200,50 @@ public partial class PermissionService
     public async Task DenyManyApplicationForGroupAsync(
         Guid groupId,
         Guid applicationId,
-        params ScopedApplicationPermissionKind[] kinds)
+        params IEnumerable<ScopedApplicationPermissionKind> kinds)
     {
-        var session = await _mongoClient.StartSessionAsync();
-        session.StartTransaction();
-
+        await using var ctx = _db.CreateSession();
+        await using var trans = await ctx.Database.BeginTransactionAsync();
         try
         {
-            var existingToUpdate = await _groupPermissionAppRepo.GetManyBy(new()
-            {
-                GroupId = groupId,
-                ApplicationId = applicationId,
-                KindsIn = kinds,
-                Allow = true
-            });
+            var existingPermissions = await ctx.GroupApplicationPermissions
+                .Where(e
+                    => e.GroupId == groupId
+                    && e.ApplicationId == applicationId
+                    && kinds.Contains(e.Kind))
+                .ToListAsync();
 
-            foreach (var item in existingToUpdate)
-            {
-                item.Allow = false;
-                await _groupPermissionAppRepo.InsertOrUpdate(item);
-            }
+            await ctx.GroupApplicationPermissions
+                .Where(e
+                    => e.GroupId == groupId
+                    && e.ApplicationId == applicationId
+                    && kinds.Contains(e.Kind)
+                    && e.Allow)
+                .ExecuteUpdateAsync(e => e
+                .SetProperty(p => p.Allow, false));
 
-            var existing = await _groupPermissionAppRepo.GetManyBy(
-                new()
+            foreach (var kind in kinds.Where(e => !existingPermissions.Any(x => x.Kind == e)))
+            {
+                await ctx.GroupApplicationPermissions.AddAsync(new GroupPermissionApplicationModel
                 {
                     GroupId = groupId,
                     ApplicationId = applicationId,
-                    KindsIn = kinds,
-                });
-            var f = existing.Select(v => v.Kind).Distinct().ToArray();
-
-            foreach (var x in kinds.Where(v => f.Contains(v) == false))
-            {
-                await _groupPermissionAppRepo.InsertOrUpdate(new()
-                {
-                    GroupId = groupId,
-                    ApplicationId = applicationId,
-                    Kind = x,
+                    Kind = kind,
                     Allow = false
                 });
             }
-
-            await session.CommitTransactionAsync();
+            await ctx.SaveChangesAsync();
+            await trans.CommitAsync();
         }
         catch (Exception ex)
         {
+            await trans.RollbackAsync();
             SentrySdk.CaptureException(ex, (scope) =>
             {
                 scope.SetTag($"param.{nameof(groupId)}", groupId.ToString());
                 scope.SetTag($"param.{nameof(applicationId)}", applicationId.ToString());
                 scope.SetTag($"param.{nameof(kinds)}", string.Join(", ", kinds.Select(v => v.ToString())));
             });
-            await session.AbortTransactionAsync();
             throw;
         }
 
@@ -266,13 +252,13 @@ public partial class PermissionService
     public Task DenyManyApplicationForGroupAsync(
         GroupModel group,
         ApplicationModel application,
-        params ScopedApplicationPermissionKind[] kinds)
+        params IEnumerable<ScopedApplicationPermissionKind> kinds)
         => DenyManyApplicationForGroupAsync(group.Id, application.Id, kinds);
 
     public Task DenyManyApplicationForGroupAsync(
         GroupModel group,
         Guid applicationId,
-        params ScopedApplicationPermissionKind[] kinds) =>
+        params IEnumerable<ScopedApplicationPermissionKind> kinds) =>
         DenyManyApplicationForGroupAsync(group.Id, applicationId, kinds);
     #endregion
     
@@ -280,24 +266,20 @@ public partial class PermissionService
     public async Task RevokeManyApplicationForGroupAsync(
         Guid groupId,
         Guid applicationId,
-        params ScopedApplicationPermissionKind[] kinds)
+        params IEnumerable<ScopedApplicationPermissionKind> kinds)
     {
-        var session = await _mongoClient.StartSessionAsync();
-        session.StartTransaction();
+        await using var ctx = _db.CreateSession();
+        await using var trans = await ctx.Database.BeginTransactionAsync();
         try
         {
-
-            var existing = await _groupPermissionAppRepo.GetManyBy(
-                new()
-                {
-                    GroupId = groupId,
-                    ApplicationId = applicationId,
-                    KindsIn = kinds,
-                });
-            var ids = existing.Select(v => v.Id).Distinct().ToArray();
-            await _groupPermissionAppRepo.Delete(ids);
-
-            await session.CommitTransactionAsync();
+            await ctx.GroupApplicationPermissions
+                .Where(e
+                    => e.GroupId == groupId
+                    && e.ApplicationId == applicationId
+                    && kinds.Contains(e.Kind))
+                .ExecuteDeleteAsync();
+            await ctx.SaveChangesAsync();
+            await trans.CommitAsync();
         }
         catch (Exception ex)
         {
@@ -307,23 +289,22 @@ public partial class PermissionService
                 scope.SetTag($"param.{nameof(applicationId)}", applicationId.ToString());
                 scope.SetTag($"param.{nameof(kinds)}", string.Join(", ", kinds.Select(v => v.ToString())));
             });
-            await session.AbortTransactionAsync();
+            await trans.RollbackAsync();
             throw;
         }
-
         await _permissionCacheService.CalculateGroup(groupId);
     }
 
     public Task RevokeManyApplicationForGroupAsync(
         GroupModel group,
         ApplicationModel application,
-        params ScopedApplicationPermissionKind[] kinds)
+        params IEnumerable<ScopedApplicationPermissionKind> kinds)
         => RevokeManyApplicationForGroupAsync(group.Id, application.Id, kinds);
     
     public Task RevokeManyApplicationForGroupAsync(
         GroupModel group,
         Guid applicationId,
-        params ScopedApplicationPermissionKind[] kinds)
+        params IEnumerable<ScopedApplicationPermissionKind> kinds)
         => RevokeManyApplicationForGroupAsync(group.Id, applicationId, kinds);
     #endregion
 }

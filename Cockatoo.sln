@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.0.11201.2 d18.0
+VisualStudioVersion = 18.0.11201.2
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Adastral.Cockatoo.MongoDataAccess", "Adastral.Cockatoo.MongoDataAccess\Adastral.Cockatoo.MongoDataAccess.csproj", "{55711613-E0FC-47AA-939C-03D7D3A4EBD8}"
 EndProject
@@ -17,13 +17,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.Services"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.Services.WebApi.Models", "Adastral.Cockatoo.Services.WebApi.Models\Adastral.Cockatoo.Services.WebApi.Models.csproj", "{5ED97820-8A4F-4BBB-9477-8114C7AEBFA8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.Services.Core", "Adastral.Cockatoo.Services.Core\Adastral.Cockatoo.Services.Core.csproj", "{176423AA-96CD-40DF-9105-9611E1BD2438}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.WebApi", "Adastral.Cockatoo.WebApi\Adastral.Cockatoo.WebApi.csproj", "{399645DA-A71B-49DD-91E7-D3007173C3B3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.DataAccess", "Adastral.Cockatoo.DataAccess\Adastral.Cockatoo.DataAccess.csproj", "{1FC1077C-8189-47D0-A594-9274F9C7B7F5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.Shared.AspNet", "Adastral.Cockatoo.Shared.AspNet\Adastral.Cockatoo.Shared.AspNet.csproj", "{D51BDC86-38DC-43FC-803C-B6820F64B03C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.Common.AspNet", "Adastral.Cockatoo.Shared.AspNet\Adastral.Cockatoo.Common.AspNet.csproj", "{D51BDC86-38DC-43FC-803C-B6820F64B03C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adastral.Cockatoo.MongoMigrationConsole", "Adastral.Cockatoo.MongoMigrationConsole\Adastral.Cockatoo.MongoMigrationConsole.csproj", "{A6096D62-109C-49B8-9D85-838722D44F76}"
 EndProject
@@ -113,18 +111,6 @@ Global
 		{5ED97820-8A4F-4BBB-9477-8114C7AEBFA8}.Release|x64.Build.0 = Release|Any CPU
 		{5ED97820-8A4F-4BBB-9477-8114C7AEBFA8}.Release|x86.ActiveCfg = Release|Any CPU
 		{5ED97820-8A4F-4BBB-9477-8114C7AEBFA8}.Release|x86.Build.0 = Release|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Debug|x64.Build.0 = Debug|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Debug|x86.Build.0 = Debug|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Release|Any CPU.Build.0 = Release|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Release|x64.ActiveCfg = Release|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Release|x64.Build.0 = Release|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Release|x86.ActiveCfg = Release|Any CPU
-		{176423AA-96CD-40DF-9105-9611E1BD2438}.Release|x86.Build.0 = Release|Any CPU
 		{399645DA-A71B-49DD-91E7-D3007173C3B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{399645DA-A71B-49DD-91E7-D3007173C3B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{399645DA-A71B-49DD-91E7-D3007173C3B3}.Debug|x64.ActiveCfg = Debug|Any CPU

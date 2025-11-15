@@ -11,7 +11,7 @@ public class BullseyeCacheService : BaseService
 {
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
     private readonly BullseyeAppRepository _bullAppRepo;
-    private readonly BullseyeAppRevisionRepository _bullAppRevRepo;
+    private readonly BullseyeRevisionRepository _bullAppRevRepo;
     private readonly BullseyePatchRepository _bullPatchRepo;
     private readonly ApplicationRepository _appDetailRepo;
     private readonly StorageFileRepository _storageFileRepo;
@@ -22,7 +22,7 @@ public class BullseyeCacheService : BaseService
         : base(services)
     {
         _bullAppRepo = services.GetRequiredService<BullseyeAppRepository>();
-        _bullAppRevRepo = services.GetRequiredService<BullseyeAppRevisionRepository>();
+        _bullAppRevRepo = services.GetRequiredService<BullseyeRevisionRepository>();
         _bullPatchRepo = services.GetRequiredService<BullseyePatchRepository>();
 
         _appDetailRepo = services.GetRequiredService<ApplicationRepository>();

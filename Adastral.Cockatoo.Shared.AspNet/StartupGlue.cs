@@ -1,4 +1,3 @@
-using Adastral.Cockatoo.Common;
 using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
 using EFCoreSecondLevelCacheInterceptor;
@@ -12,11 +11,11 @@ using Microsoft.Extensions.DependencyInjection;
 using NLog;
 using System.ComponentModel;
 using System.Net;
-using System.Linq;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Hosting;
+using System.Reflection;
 
-namespace Adastral.Cockatoo.Shared.AspNet;
+namespace Adastral.Cockatoo.Common.AspNet;
 
 public partial class StartupGlue
 {
@@ -225,16 +224,30 @@ public partial class StartupGlue
 
     public static void InitializeNLog()
     {
-        System.Diagnostics.Debug.WriteLine($"Initialize NLog");
+        System.Diagnostics.Debug.WriteLine("Initialize NLog");
+
         var relativeConfigurationLocation = Path.Combine(Environment.CurrentDirectory, "nlog.config");
-        if (File.Exists(relativeConfigurationLocation))
+        if (File.Exists(FeatureFlags.NLogConfigLocation))
+        {
+            System.Diagnostics.Debug.WriteLine("Loading configuration from " + FeatureFlags.NLogConfigLocation);
+            LogManager.Setup().LoadConfigurationFromFile(FeatureFlags.NLogConfigLocation);
+        }
+        else if (File.Exists(relativeConfigurationLocation))
         {
             System.Diagnostics.Debug.WriteLine("Loading configuration from " + relativeConfigurationLocation);
             LogManager.Setup().LoadConfigurationFromFile(relativeConfigurationLocation);
         }
         else
         {
-            LogManager.Setup().LoadConfigurationFromAssemblyResource(typeof(StartupGlue).Assembly, "nlog.config");
+            var entryAssembly = Assembly.GetEntryAssembly();
+            if (entryAssembly?.GetManifestResourceNames().Any(e => e == $"{entryAssembly.GetName().Name}.nlog.config") ?? false)
+            {
+                LogManager.Setup().LoadConfigurationFromAssemblyResource(entryAssembly, "nlog.config");
+            }
+            else
+            {
+                LogManager.Setup().LoadConfigurationFromAssemblyResource(typeof(StartupGlue).Assembly, "nlog.config");
+            }
         }
 
         if (!string.IsNullOrEmpty(FeatureFlags.SentryDSN))

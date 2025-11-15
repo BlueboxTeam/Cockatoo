@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Adastral.Cockatoo.Services.WebApi\Adastral.Cockatoo.Services.WebApi.csproj" />
-    <ProjectReference Include="..\Adastral.Cockatoo.Shared.AspNet\Adastral.Cockatoo.Shared.AspNet.csproj" />
+    <ProjectReference Include="..\Adastral.Cockatoo.Shared.AspNet\Adastral.Cockatoo.Common.AspNet.csproj" />
   </ItemGroup>
 
   <ItemGroup>

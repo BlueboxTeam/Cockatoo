@@ -1,7 +1,7 @@
 using MessagePack;
 using MessagePack.Formatters;
 
-namespace Adastral.Cockatoo.Shared.AspNet;
+namespace Adastral.Cockatoo.Common.AspNet;
 
 public class DBNullFormatter : IMessagePackFormatter<DBNull>
 {

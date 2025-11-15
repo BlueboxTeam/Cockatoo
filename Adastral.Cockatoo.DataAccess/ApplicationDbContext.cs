@@ -55,6 +55,11 @@ public class ApplicationDbContext
     public DbSet<GroupPermissionGlobalModel> GroupGlobalPermissions { get; set; }
     #endregion
 
+    #region Permission Cache
+    public DbSet<UserGlobalPermissionCacheModel> UserGlobalPermissionCache { get; set; }
+    public DbSet<UserApplicationPermissionCacheModel> UserApplicationPermissionCache { get; set; }
+    #endregion
+
     #region Blog
     public DbSet<BlogPostModel> BlogPosts { get; set; }
     public DbSet<BlogPostAttachmentModel> BlogPostAttachments { get; set; }
@@ -63,12 +68,30 @@ public class ApplicationDbContext
     public DbSet<BlogTagModel> BlogTags { get; set; }
     #endregion
 
+    public DbSet<TaskMutexModel> TaskMutexes { get; set; }
+
     // NOTE ScopedApplicationRoleModel will be used in the future to replace GroupPermissions
     public DbSet<ScopedApplicationRoleModel> ScopedApplicationRoles { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<TaskMutexModel>(b =>
+        {
+            b.ToTable(TaskMutexModel.TableName).HasKey(e => e.Id);
+        });
+        #region Permission Cache
+        builder.Entity<UserGlobalPermissionCacheModel>(b =>
+        {
+            b.ToTable(UserGlobalPermissionCacheModel.TableName)
+            .HasKey(e => new { e.UserId, e.Permission });
+        });
+        builder.Entity<UserApplicationPermissionCacheModel>(b =>
+        {
+            b.ToTable(UserApplicationPermissionCacheModel.TableName)
+            .HasKey(e => new { e.UserId, e.ApplicationId, e.Permission });
+        });
+        #endregion
 
         builder.Entity<StorageFileModel>(b =>
         {

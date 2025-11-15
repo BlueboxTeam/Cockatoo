@@ -11,7 +11,11 @@ public class BlogPostV1DeleteRequest
     /// <summary>
     /// <see cref="BlogPostModel.Id"/>
     /// </summary>
-    public string Id { get; set; } = "";
+    public Guid Id { get; set; }
+    /// <summary>
+    /// User Id that wants to delete the blog post.
+    /// </summary>
+    public Guid? DeletedByUserId { get; set; }
     /// <summary>
     /// Delete any Storage resources that are used by the Blog Post Id provided.
     /// </summary>

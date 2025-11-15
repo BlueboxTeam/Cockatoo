@@ -4,9 +4,14 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Adastral.Cockatoo.DataAccess.Models;
 
+// TODO add CreatedAt property
 public class UserModel : IdentityUser<Guid>
 {
     public const string TableName = "AspNetUsers";
+    public UserModel() : base()
+    {
+        CreatedAt = DateTimeOffset.UtcNow;
+    }
 
     [MaxLength(100)]
     public string? ThemeName { get; set; }
@@ -16,6 +21,8 @@ public class UserModel : IdentityUser<Guid>
 
     [DefaultValue(false)]
     public bool IsServiceAccount { get; set; } = false;
+
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 public enum CanUserCreateTokenKind

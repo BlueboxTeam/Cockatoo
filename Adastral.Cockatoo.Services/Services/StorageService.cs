@@ -9,28 +9,26 @@ using NLog;
 
 namespace Adastral.Cockatoo.Services;
 
-[CockatooDependency]
-public class StorageService : BaseService
+public class StorageService
 {
+    private readonly IServiceProvider _services;
     private readonly StorageFileRepository _storageFileRepo;
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
     private readonly ApplicationImageRepository _appImageRepo;
     private readonly BullseyeRevisionRepository _bullseyeAppRevisionRepo;
     private readonly BullseyePatchRepository _bullseyePatchRepo;
     private readonly BlogPostAttachmentRepository _blogPostAttachmentRepo;
-    private readonly UserPreferencesRepository _userPrefRepo;
     private readonly AUDNRevisionRepository _audnRevisionRepo;
-    private readonly CockatooConfig _config;
+    private readonly AppConfig _config;
     public StorageService(IServiceProvider services)
-        : base(services)
     {
-        _config = services.GetRequiredService<CockatooConfig>();
+        _services = services;
+        _config = services.GetRequiredService<AppConfig>();
         _storageFileRepo = services.GetRequiredService<StorageFileRepository>();
         _appImageRepo = services.GetRequiredService<ApplicationImageRepository>();
         _bullseyeAppRevisionRepo = services.GetRequiredService<BullseyeRevisionRepository>();
         _bullseyePatchRepo = services.GetRequiredService<BullseyePatchRepository>();
         _blogPostAttachmentRepo = services.GetRequiredService<BlogPostAttachmentRepository>();
-        _userPrefRepo = services.GetRequiredService<UserPreferencesRepository>();
         _audnRevisionRepo = services.GetRequiredService<AUDNRevisionRepository>();
     }
 
@@ -263,16 +261,6 @@ public class StorageService : BaseService
             () =>
             {
                 var data = _audnRevisionRepo.GetAllUsingFile(file).Result;
-                lock (result)
-                {
-                    result.AddRange(data.Cast<object>());
-                }
-            }));
-        // User Preferences
-        taskList.Add(new Task(
-            () =>
-            {
-                var data = _userPrefRepo.GetAllUsingFile(file).Result;
                 lock (result)
                 {
                     result.AddRange(data.Cast<object>());

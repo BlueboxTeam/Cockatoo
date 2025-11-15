@@ -24,15 +24,22 @@ public static class Extensions
             .AddScoped<GroupRepository>()
             .AddScoped<GroupUserAssociationRepository>()
 
+            .AddScoped<UserRepository>()
+            .AddScoped<UserApplicationPermissionCacheRepository>()
+            .AddScoped<UserGlobalPermissionCacheRepository>()
+
             .AddScoped<ApplicationColorRepository>()
             .AddScoped<ApplicationImageRepository>()
             .AddScoped<ApplicationRepository>()
 
+            .AddScoped<BlogPostAttachmentRepository>()
             .AddScoped<BlogPostRepository>()
             .AddScoped<BlogPostTagRepository>()
             .AddScoped<BlogTagRepository>()
 
             .AddScoped<SouthbankCacheRepository>()
-            .AddScoped<StorageFileRepository>();
+            .AddScoped<StorageFileRepository>()
+            
+            .AddScoped<TaskMutexRepository>();
     }
 }

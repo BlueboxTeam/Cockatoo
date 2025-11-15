@@ -18,11 +18,11 @@ public class SouthbankService : BaseService
     private readonly ApplicationColorRepository _appColorRepo;
     private readonly StorageService _storageService;
     private readonly TaskMutexService _taskMutexService;
-    private readonly CockatooConfig _config;
+    private readonly AppConfig _config;
     public SouthbankService(IServiceProvider services)
         : base(services)
     {
-        _config = services.GetRequiredService<CockatooConfig>();
+        _config = services.GetRequiredService<AppConfig>();
         _sbCacheRepo = services.GetRequiredService<SouthbankCacheRepository>();
         _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
         _appImageRepo = services.GetRequiredService<ApplicationImageRepository>();

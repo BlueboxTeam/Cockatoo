@@ -6,17 +6,17 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Adastral.Cockatoo.Common;
 using Adastral.Cockatoo.Common.Helpers;
+using Adastral.Cockatoo.DataAccess;
 using Adastral.Cockatoo.DataAccess.Models;
 using Adastral.Cockatoo.DataAccess.Models.AutoUpdaterDotNet;
 using Adastral.Cockatoo.DataAccess.Repositories;
 using Adastral.Cockatoo.DataAccess.Repositories.AutoUpdaterDotNet;
+using Adastral.Cockatoo.DataAccess.Repositories.Group;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Driver;
 
 namespace Adastral.Cockatoo.Services;
 
-[CockatooDependency]
 public class ApplicationDetailService : BaseService
 {
     private readonly ApplicationRepository _appDetailRepo;
@@ -24,24 +24,24 @@ public class ApplicationDetailService : BaseService
     private readonly StorageFileRepository _storageFileRepo;
     private readonly AUDNRevisionRepository _audnRevisionRepo;
     private readonly IDistributedCache _cache;
-    private readonly MongoClient _mongoClient;
     private readonly BullseyeService _bullseyeService;
     private readonly GroupPermissionApplicationRepository _groupPermissionAppRepo;
     private readonly PermissionCacheService _permissionCacheService;
-    private readonly CockatooConfig _config;
+    private readonly AppConfig _config;
+    private readonly ApplicationDbContext _db;
     public ApplicationDetailService(IServiceProvider services)
         : base(services)
     {
-        _config = services.GetRequiredService<CockatooConfig>();
+        _config = services.GetRequiredService<AppConfig>();
         _appDetailRepo = services.GetRequiredService<ApplicationRepository>();
         _storageService = services.GetRequiredService<StorageService>();
         _storageFileRepo = services.GetRequiredService<StorageFileRepository>();
         _audnRevisionRepo = services.GetRequiredService<AUDNRevisionRepository>();
-        _mongoClient = services.GetRequiredService<MongoClient>();
         _bullseyeService = services.GetRequiredService<BullseyeService>();
         _groupPermissionAppRepo = services.GetRequiredService<GroupPermissionApplicationRepository>();
         _permissionCacheService = services.GetRequiredService<PermissionCacheService>();
         _cache = services.GetRequiredService<IDistributedCache>();
+        _db = services.GetRequiredService<ApplicationDbContext>();
     }
 
     internal class AUDNXMLCacheKey
@@ -227,29 +227,23 @@ public class ApplicationDetailService : BaseService
                 $"Could not find {nameof(ApplicationModel)} with Id {appId}", nameof(appId));
         }
 
-        using (var session = await _mongoClient.StartSessionAsync())
+        await using var trans = await _db.Database.BeginTransactionAsync();
+        List<GroupPermissionApplicationModel> appPermissions;
+        try
         {
-            session.StartTransaction();
+            await _bullseyeService.DeleteBullseyeApp(model.Id, true, createTransaction: false);
+            appPermissions = await _groupPermissionAppRepo.GetManyByApplication(model.Id);
+            await _groupPermissionAppRepo.Delete(appPermissions.Select(v => v.Id).ToArray());
+            await _appDetailRepo.DeleteById(deletedByUser, model.Id);
 
-            try
-            {
-                await _bullseyeService.DeleteBullseyeApp(model.Id, true);
-                var appPermissions = await _groupPermissionAppRepo.GetManyByApplication(model.Id);
-                await _groupPermissionAppRepo.Delete(appPermissions.Select(v => v.Id).ToArray());
-                await _appDetailRepo.DeleteById(deletedByUser, model.Id);
-                
-                foreach (var x in appPermissions)
-                {
-                    await _permissionCacheService.CalculateGroup(x.GroupId);
-                }
-            }
-            catch (Exception ex)
-            {
-                await session.AbortTransactionAsync();
-                throw new InvalidOperationException($"Failed to delete Application {model.DisplayName} ({model.Id})", ex);
-            }
-
-            await session.CommitTransactionAsync();
+            await _db.SaveChangesAsync();
+            await trans.CommitAsync();
         }
+        catch (Exception ex)
+        {
+            await trans.RollbackAsync();
+            throw new InvalidOperationException($"Failed to delete Application {model.DisplayName} ({model.Id})", ex);
+        }
+        await Task.WhenAll(appPermissions.Select(e => _permissionCacheService.CalculateGroup(e.GroupId)));
     }
 }

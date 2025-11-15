@@ -32,6 +32,15 @@ public static class FeatureFlags
     public static string ConfigLocation => ParseString("COCKATOO_CONFIG", RunningInDocker ? "/config/cockatoo.xml" : "./config/cockatoo.xml");
 
     /// <summary>
+    /// <para><b>Key:</b> <c>COCKATOO_NLOG_CONFIG</c></para>
+    /// <para>Default Value: <c>./config/nlog.config</c></para>
+    /// </summary>
+    /// <remarks>
+    /// When running in docker, the default config location will actually be in <c>/config/nlog.config</c>
+    /// </remarks>
+    public static string NLogConfigLocation => ParseString("COCKATOO_NLOG_CONFIG", RunningInDocker ? "/config/nlog.config" : "./config/nlog.config");
+
+    /// <summary>
     /// <para>Sentry DSN</para>
     /// <para>Key: <c>COCKATOO_SENTRY_DSN</c></para>
     /// </summary>

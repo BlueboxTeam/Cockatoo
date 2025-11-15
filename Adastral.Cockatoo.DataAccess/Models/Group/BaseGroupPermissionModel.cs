@@ -3,6 +3,11 @@ namespace Adastral.Cockatoo.DataAccess.Models;
 public class BasePermissionGroupModel<TKind>
     where TKind : struct, Enum
 {
+    public BasePermissionGroupModel()
+    {
+        Id = Guid.NewGuid();
+    }
+
     public Guid Id { get; set; }
     
     /// <summary>

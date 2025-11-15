@@ -9,7 +9,7 @@ public class BlogPostV1Response
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string Type => GetType().Name;
     [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
+    public Guid Id { get; set; }
     [JsonPropertyName("title")]
     public string Title { get; set; } = "";
     [JsonPropertyName("body")]
@@ -17,7 +17,7 @@ public class BlogPostV1Response
     [JsonPropertyName("authors")]
     public List<UserV1StrippedResponse> Authors { get; set; } = [];
     [JsonPropertyName("createdAt")]
-    public long CreatedAtTimestamp { get; set; } = 0;
+    public DateTimeOffset CreatedAtTimestamp { get; set; }
     [JsonPropertyName("tags")]
     public List<BlogPostV1TagResponse> Tags { get; set; } = [];
 
@@ -26,6 +26,6 @@ public class BlogPostV1Response
         Id = model.Id;
         Title = model.Title;
         Body = model.Content;
-        CreatedAtTimestamp = model.CreatedAtTimestamp.Value;
+        CreatedAtTimestamp = model.CreatedAt;
     }
 }
